@@ -1,6 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
-import Svg, { Path, Defs, Pattern, Circle, Rect } from 'react-native-svg';
+import { Dimensions, StyleSheet, View } from 'react-native';
+import Svg, { Circle, Defs, Path, Pattern, Rect } from 'react-native-svg';
 import { useTheme } from '../theme/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
@@ -50,3 +49,6 @@ const styles = StyleSheet.create({
     zIndex: -1,
   },
 });
+
+//making changes here
+console.log("wee");
