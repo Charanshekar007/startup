@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -7,39 +7,17 @@ export default function SecurityCard({ title, subtitle }) {
   const { theme } = useTheme();
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
-      <View style={styles.iconContainer}>
+    <View
+      className="flex-row items-center p-4 rounded-xl border mb-6"
+      style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}
+    >
+      <View className="mr-3">
         <Feather name="shield" size={20} color={theme.primary} />
       </View>
-      <View style={styles.textContainer}>
-        <Text style={[styles.title, { color: theme.primary }]}>{title}</Text>
-        <Text style={[styles.subtitle, { color: theme.subText }]}>{subtitle}</Text>
+      <View className="flex-1">
+        <Text className="text-[13px] font-semibold mb-0.5" style={{ color: theme.primary }}>{title}</Text>
+        <Text className="text-xs" style={{ color: theme.subText }}>{subtitle}</Text>
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 24,
-  },
-  iconContainer: {
-    marginRight: 12,
-  },
-  textContainer: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  subtitle: {
-    fontSize: 12,
-  }
-});

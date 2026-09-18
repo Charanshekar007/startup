@@ -14,18 +14,18 @@ import SignUpScreen from '../screens/auth/SignUpScreen';
 function PlaceholderScreen({ route }) {
   const navigation = useNavigation();
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#020A0D' }}>
-      <Text style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 20, color: 'white' }}>
+    <View className="flex-1 justify-center items-center bg-[#020A0D]">
+      <Text className="text-2xl font-bold mb-5 text-white">
         {route.name} Screen
       </Text>
-      <Text style={{ fontSize: 16, color: '#9AA4A7', marginBottom: 40 }}>
+      <Text className="text-base text-[#9AA4A7] mb-10">
         UI coming soon!
       </Text>
       <TouchableOpacity 
         onPress={() => navigation.goBack()}
-        style={{ padding: 15, backgroundColor: '#32D74B', borderRadius: 8 }}
+        className="p-[15px] bg-[#32D74B] rounded-lg"
       >
-        <Text style={{ color: 'black', fontWeight: 'bold' }}>Go Back</Text>
+        <Text className="text-black font-bold">Go Back</Text>
       </TouchableOpacity>
     </View>
   );

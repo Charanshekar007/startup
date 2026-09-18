@@ -1,24 +1,18 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native'; // <-- IMPORT ADDED
+import { useNavigation } from '@react-navigation/native';
 
 export default function MatchesScreen() {
-  const navigation = useNavigation(); // <-- HOOK ADDED
+  const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState('LIVE'); 
   const tabs = ['LIVE', 'UPCOMING', 'FOLLOWING', 'COMPLETED', 'MY MATCHES'];
 
   const colors = {
-    bg: '#0a0a0a',
-    cardBg: '#121212',
     primary: '#23c55e',
     upcoming: '#3498db',
     teamMember: '#f39c12',
-    text: '#ffffff',
-    subText: '#888888',
-    border: '#222222',
-    liveBorder: '#1a4024',
   };
 
   // ==========================================
@@ -61,117 +55,115 @@ export default function MatchesScreen() {
     { id: 's1', type: 'LIVE', league: 'City Premier League • T20', teamA: 'Lions CC', teamB: 'Kings CC', logoA: 'https://ui-avatars.com/api/?name=LC&background=b9770e&color=fff', logoB: 'https://ui-avatars.com/api/?name=KC&background=c0392b&color=fff', scoreA: '98/2', oversA: '11.4 Ov', scoreB: '-/-', oversB: 'Yet to bat', status: null, venue: 'Greenfield Stadium, Bengaluru', rolePillText: 'SCORER', rolePillIcon: 'pencil' },
   ];
 
-
   // ==========================================
   // HEADERS
   // ==========================================
   
   const SectionHeader = ({ icon, title, iconColor }) => (
-    <View style={styles.sectionHeader}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <MaterialCommunityIcons name={icon} size={18} color={iconColor} style={{ marginRight: 8 }} />
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+    <View className="flex-row justify-between items-center mb-3 mt-2">
+      <View className="flex-row items-center">
+        <MaterialCommunityIcons name={icon} size={18} color={iconColor} className="mr-2" />
+        <Text className="text-xs font-bold tracking-widest text-white">{title}</Text>
       </View>
-      <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Text style={{ color: colors.primary, fontSize: 12, marginRight: 4 }}>View all</Text>
-        <Feather name="chevron-right" size={14} color={colors.primary} />
+      <TouchableOpacity className="flex-row items-center">
+        <Text className="text-[#23c55e] text-xs mr-1">View all</Text>
+        <Feather name="chevron-right" size={14} color="#23c55e" />
       </TouchableOpacity>
     </View>
   );
 
   const SubtitledHeader = ({ icon, title, subtitle }) => (
-    <View style={{ marginBottom: 16, marginTop: 8 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <MaterialCommunityIcons name={icon} size={20} color={colors.primary} style={{ marginRight: 8 }} />
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+    <View className="mb-4 mt-2">
+      <View className="flex-row justify-between items-center">
+        <View className="flex-row items-center">
+          <MaterialCommunityIcons name={icon} size={20} color="#23c55e" className="mr-2" />
+          <Text className="text-xs font-bold tracking-widest text-white">{title}</Text>
         </View>
-        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ color: colors.primary, fontSize: 12, marginRight: 4 }}>View all</Text>
-          <Feather name="chevron-right" size={14} color={colors.primary} />
+        <TouchableOpacity className="flex-row items-center">
+          <Text className="text-[#23c55e] text-xs mr-1">View all</Text>
+          <Feather name="chevron-right" size={14} color="#23c55e" />
         </TouchableOpacity>
       </View>
-      <Text style={{ color: colors.subText, fontSize: 12, marginTop: 4 }}>{subtitle}</Text>
+      <Text className="text-[#888888] text-xs mt-1">{subtitle}</Text>
     </View>
   );
-
 
   // ==========================================
   // CARD COMPONENTS (ALL TABS)
   // ==========================================
   
   const LiveCard = ({ match }) => (
-    <View style={[styles.card, { borderColor: colors.liveBorder }]}>
-      <View style={styles.cardHeader}>
-        <View style={[styles.livePill, { backgroundColor: colors.primary }]}><Text style={styles.livePillText}>LIVE</Text></View>
-        <Text style={styles.leagueText}>{match.league}</Text>
-        <View style={{ width: 34 }} />
+    <View className="bg-[#121212] border border-[#1a4024] rounded-xl mb-4">
+      <View className="flex-row justify-between items-center p-3 pb-0">
+        <View className="px-[6px] py-[3px] rounded bg-[#23c55e]"><Text className="text-[9px] font-bold text-black">LIVE</Text></View>
+        <Text className="text-[#888888] text-[10px] tracking-[0.5px] uppercase flex-1 ml-2">{match.league}</Text>
+        <View className="w-[34px]" />
       </View>
-      <View style={styles.scoreRow}>
-        <View style={styles.teamBlock}>
-          <Image source={{ uri: match.logoA }} style={styles.teamLogo} />
-          <Text style={styles.teamName}>{match.teamA}</Text>
+      <View className="flex-row justify-between items-center px-4 py-4">
+        <View className="items-center w-20">
+          <Image source={{ uri: match.logoA }} className="w-11 h-11 rounded-full mb-2 bg-[#222222]" />
+          <Text className="text-white text-xs font-semibold text-center">{match.teamA}</Text>
         </View>
-        <View style={styles.centerBlock}>
-          <View style={styles.scoreContainer}>
-            <View style={styles.scoreCol}>
-              <Text style={styles.scoreText}>{match.scoreA}</Text>
-              <Text style={styles.oversText}>{match.oversA}</Text>
+        <View className="flex-1 items-center justify-center">
+          <View className="flex-row items-center justify-center w-full">
+            <View className="items-center w-[70px]">
+              <Text className="text-white text-[22px] font-bold">{match.scoreA}</Text>
+              <Text className="text-[11px] mt-1 text-[#888888]">{match.oversA}</Text>
             </View>
-            <View style={styles.vsCircle}><Text style={styles.vsText}>VS</Text></View>
-            <View style={styles.scoreCol}>
-              <Text style={styles.scoreText}>{match.scoreB}</Text>
-              <Text style={styles.oversText}>{match.oversB}</Text>
+            <View className="w-8 h-8 rounded-full border border-[#333333] justify-center items-center mx-2"><Text className="text-[#888888] text-[10px]">VS</Text></View>
+            <View className="items-center w-[70px]">
+              <Text className="text-white text-[22px] font-bold">{match.scoreB}</Text>
+              <Text className="text-[11px] mt-1 text-[#888888]">{match.oversB}</Text>
             </View>
           </View>
-          <View style={styles.statusPill}><Text style={styles.statusText}>{match.status}</Text></View>
+          <View className="border border-[#23c55e] bg-[#0a1f10] px-[10px] py-1 rounded-xl mt-3"><Text className="text-[#23c55e] text-[11px] font-semibold text-center">{match.status}</Text></View>
         </View>
-        <View style={styles.teamBlock}>
-          <Image source={{ uri: match.logoB }} style={styles.teamLogo} />
-          <Text style={styles.teamName}>{match.teamB}</Text>
+        <View className="items-center w-20">
+          <Image source={{ uri: match.logoB }} className="w-11 h-11 rounded-full mb-2 bg-[#222222]" />
+          <Text className="text-white text-xs font-semibold text-center">{match.teamB}</Text>
         </View>
       </View>
-      <View style={styles.cardFooter}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <Feather name="map-pin" size={12} color={colors.primary} />
-          <Text style={styles.venueText}>{match.venue}</Text>
+      <View className="flex-row justify-between items-center p-3 border-t border-[#222222]">
+        <View className="flex-row items-center flex-1">
+          <Feather name="map-pin" size={12} color="#23c55e" />
+          <Text className="text-[#888888] text-[11px] ml-[6px]">{match.venue}</Text>
         </View>
-        <Feather name="chevron-right" size={16} color={colors.subText} />
+        <Feather name="chevron-right" size={16} color="#888888" />
       </View>
     </View>
   );
 
   const UpcomingCard = ({ match }) => (
-    <View style={[styles.card, { borderColor: colors.border, padding: 16 }]}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-        <Feather name="calendar" size={12} color={colors.primary} style={{ marginRight: 6 }} />
-        <Text style={{ color: colors.primary, fontSize: 11, fontWeight: 'bold' }}>{match.dateLabel} • {match.time}</Text>
+    <View className="bg-[#121212] border border-[#222222] rounded-xl mb-4 p-4">
+      <View className="flex-row items-center mb-4">
+        <Feather name="calendar" size={12} color="#23c55e" className="mr-[6px]" />
+        <Text className="text-[#23c55e] text-[11px] font-bold ml-1">{match.dateLabel} • {match.time}</Text>
       </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, paddingHorizontal: 16 }}>
-        <View style={{ alignItems: 'center', flex: 1 }}>
-          <Image source={{ uri: match.logoA }} style={styles.upcomingBigLogo} />
-          <Text style={styles.upcomingBigTeamName} numberOfLines={1}>{match.teamA}</Text>
+      <View className="flex-row items-center justify-between mb-5 px-4">
+        <View className="items-center flex-1">
+          <Image source={{ uri: match.logoA }} className="w-14 h-14 rounded-full mb-2 bg-[#222222]" />
+          <Text className="text-white text-[13px] font-semibold text-center" numberOfLines={1}>{match.teamA}</Text>
         </View>
-        <View style={styles.vsCircle}><Text style={styles.vsText}>VS</Text></View>
-        <View style={{ alignItems: 'center', flex: 1 }}>
-          <Image source={{ uri: match.logoB }} style={styles.upcomingBigLogo} />
-          <Text style={styles.upcomingBigTeamName} numberOfLines={1}>{match.teamB}</Text>
+        <View className="w-8 h-8 rounded-full border border-[#333333] justify-center items-center mx-2"><Text className="text-[#888888] text-[10px]">VS</Text></View>
+        <View className="items-center flex-1">
+          <Image source={{ uri: match.logoB }} className="w-14 h-14 rounded-full mb-2 bg-[#222222]" />
+          <Text className="text-white text-[13px] font-semibold text-center" numberOfLines={1}>{match.teamB}</Text>
         </View>
       </View>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <View style={{ flex: 1, paddingRight: 12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-            <Feather name="map-pin" size={12} color={colors.primary} style={{ marginRight: 6 }} />
-            <Text style={styles.metaText} numberOfLines={1}>{match.venue}</Text>
+      <View className="flex-row justify-between items-end">
+        <View className="flex-1 pr-3">
+          <View className="flex-row items-center mb-[6px]">
+            <Feather name="map-pin" size={12} color="#23c55e" className="mr-[6px]" />
+            <Text className="text-[#888888] text-[11px] ml-1" numberOfLines={1}>{match.venue}</Text>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Feather name="award" size={12} color={colors.subText} style={{ marginRight: 6 }} />
-            <Text style={styles.metaText} numberOfLines={1}>{match.league}</Text>
+          <View className="flex-row items-center">
+            <Feather name="award" size={12} color="#888888" className="mr-[6px]" />
+            <Text className="text-[#888888] text-[11px] ml-1" numberOfLines={1}>{match.league}</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.followBtn}>
-          <Feather name="plus" size={12} color={colors.primary} />
-          <Text style={styles.followBtnText}>Follow</Text>
+        <TouchableOpacity className="flex-row items-center border border-[#23c55e] px-3 py-[6px] rounded-md bg-transparent">
+          <Feather name="plus" size={12} color="#23c55e" />
+          <Text className="text-[#23c55e] text-[11px] font-bold ml-1">Follow</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -182,66 +174,76 @@ export default function MatchesScreen() {
     const isUpcoming = match.type === 'UPCOMING';
     const isCompleted = match.type === 'COMPLETED';
 
-    let borderColor = colors.border;
-    let pillBg = '#1a1a1a';
-    let pillText = colors.subText;
+    let borderColorClass = 'border-[#222222]';
+    let pillBgClass = 'bg-[#1a1a1a]';
+    let pillTextClass = 'text-[#888888]';
     
-    if (isLive) { borderColor = colors.liveBorder; pillBg = colors.primary; pillText = '#000'; } 
-    else if (isUpcoming) { pillBg = 'rgba(52, 152, 219, 0.15)'; pillText = colors.upcoming; }
+    if (isLive) { 
+      borderColorClass = 'border-[#1a4024]'; 
+      pillBgClass = 'bg-[#23c55e]'; 
+      pillTextClass = 'text-black'; 
+    } else if (isUpcoming) { 
+      pillBgClass = 'bg-[#3498db]/15'; 
+      pillTextClass = 'text-[#3498db]'; 
+    }
 
     return (
-      <View style={[styles.card, { borderColor }]}>
-        <View style={styles.cardHeader}>
-          <View style={[styles.livePill, { backgroundColor: pillBg }]}>
-            <Text style={[styles.livePillText, { color: pillText }]}>{match.type}</Text>
+      <View className={`bg-[#121212] border rounded-xl mb-4 ${borderColorClass}`}>
+        <View className="flex-row justify-between items-center p-3 pb-0">
+          <View className={`px-[6px] py-[3px] rounded ${pillBgClass}`}>
+            <Text className={`text-[9px] font-bold ${pillTextClass}`}>{match.type}</Text>
           </View>
-          <Text style={styles.leagueText}>{match.league}</Text>
-          <View style={{ width: 40 }} />
+          <Text className="text-[#888888] text-[10px] tracking-[0.5px] uppercase flex-1 ml-2">{match.league}</Text>
+          <View className="w-10" />
         </View>
-        <View style={styles.scoreRow}>
-          <View style={styles.teamBlock}>
-            <Image source={{ uri: match.logoA }} style={styles.teamLogo} />
-            <Text style={styles.teamName}>{match.teamA}</Text>
+        <View className="flex-row justify-between items-center px-4 py-4">
+          <View className="items-center w-20">
+            <Image source={{ uri: match.logoA }} className="w-11 h-11 rounded-full mb-2 bg-[#222222]" />
+            <Text className="text-white text-xs font-semibold text-center">{match.teamA}</Text>
           </View>
-          <View style={styles.centerBlock}>
+          <View className="flex-1 items-center justify-center">
             {isUpcoming ? (
-              <View style={{ alignItems: 'center' }}>
-                <Feather name="calendar" size={16} color={colors.subText} style={{ marginBottom: 6 }} />
-                <Text style={{ color: colors.subText, fontSize: 11, marginBottom: 4 }}>{match.date}</Text>
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>{match.time}</Text>
+              <View className="items-center">
+                <Feather name="calendar" size={16} color="#888888" className="mb-[6px]" />
+                <Text className="text-[#888888] text-[11px] mb-1">{match.date}</Text>
+                <Text className="text-white text-base font-bold">{match.time}</Text>
               </View>
             ) : (
               <>
-                {isCompleted && <Text style={[styles.statusText, { marginBottom: 12 }]}>{match.status}</Text>}
-                <View style={styles.scoreContainer}>
-                  <View style={styles.scoreCol}>
-                    <Text style={styles.scoreText}>{match.scoreA}</Text>
-                    <Text style={[styles.oversText, { color: isLive ? colors.primary : colors.subText }]}>{match.oversA}</Text>
+                {isCompleted && <Text className="text-[#23c55e] text-[11px] font-semibold text-center mb-3">{match.status}</Text>}
+                <View className="flex-row items-center justify-center w-full">
+                  <View className="items-center w-[70px]">
+                    <Text className="text-white text-[22px] font-bold">{match.scoreA}</Text>
+                    <Text className={`text-[11px] mt-1 ${isLive ? 'text-[#23c55e]' : 'text-[#888888]'}`}>{match.oversA}</Text>
                   </View>
-                  {isLive ? <View style={styles.vsCircle}><Text style={styles.vsText}>VS</Text></View> : <View style={{ width: 32, marginHorizontal: 8 }} />}
-                  <View style={styles.scoreCol}>
-                    <Text style={styles.scoreText}>{match.scoreB}</Text>
-                    <Text style={[styles.oversText, { color: isLive ? colors.primary : colors.subText }]}>{match.oversB}</Text>
+                  {isLive ? (
+                    <View className="w-8 h-8 rounded-full border border-[#333333] justify-center items-center mx-2"><Text className="text-[#888888] text-[10px]">VS</Text></View>
+                  ) : (
+                    <View className="w-8 mx-2" />
+                  )}
+                  <View className="items-center w-[70px]">
+                    <Text className="text-white text-[22px] font-bold">{match.scoreB}</Text>
+                    <Text className={`text-[11px] mt-1 ${isLive ? 'text-[#23c55e]' : 'text-[#888888]'}`}>{match.oversB}</Text>
                   </View>
                 </View>
-                {isLive && <Text style={[styles.statusText, { marginTop: 12 }]}>{match.status}</Text>}
+                {isLive && <Text className="text-[#23c55e] text-[11px] font-semibold text-center mt-3">{match.status}</Text>}
               </>
             )}
           </View>
-          <View style={styles.teamBlock}>
-            <Image source={{ uri: match.logoB }} style={styles.teamLogo} />
-            <Text style={styles.teamName}>{match.teamB}</Text>
+          <View className="items-center w-20">
+            <Image source={{ uri: match.logoB }} className="w-11 h-11 rounded-full mb-2 bg-[#222222]" />
+            <Text className="text-white text-xs font-semibold text-center">{match.teamB}</Text>
           </View>
         </View>
-        <View style={styles.cardFooter}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-            <Feather name="map-pin" size={12} color={colors.primary} />
-            <Text style={styles.venueText}>{match.venue}</Text>
+        <View className="flex-row justify-between items-center p-3 border-t border-[#222222]">
+          <View className="flex-row items-center flex-1">
+            <Feather name="map-pin" size={12} color="#23c55e" />
+            <Text className="text-[#888888] text-[11px] ml-[6px]">{match.venue}</Text>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <MaterialCommunityIcons name="check-circle" size={14} color={colors.primary} />
-            <Text style={{ color: colors.primary, fontSize: 11, fontWeight: 'bold', marginLeft: 4, marginRight: 8 }}>Following</Text>
-            <Feather name="chevron-right" size={16} color={colors.subText} />
+          <View className="flex-row items-center">
+            <MaterialCommunityIcons name="check-circle" size={14} color="#23c55e" />
+            <Text className="text-[#23c55e] text-[11px] font-bold ml-1 mr-2">Following</Text>
+            <Feather name="chevron-right" size={16} color="#888888" />
           </View>
         </View>
       </View>
@@ -249,47 +251,47 @@ export default function MatchesScreen() {
   };
 
   const CompletedCard = ({ match }) => (
-    <View style={[styles.card, { borderColor: colors.border }]}>
-      <View style={styles.completedHeaderRow}>
-        <Text style={styles.leagueText}>{match.league}</Text>
-        <Text style={styles.completedDateText}>{match.date}</Text>
+    <View className="bg-[#121212] border border-[#222222] rounded-xl mb-4">
+      <View className="flex-row justify-between items-center px-4 pt-4 pb-1">
+        <Text className="text-[#888888] text-[10px] tracking-[0.5px] uppercase flex-1">{match.league}</Text>
+        <Text className="text-[#888888] text-[11px]">{match.date}</Text>
       </View>
-      <View style={styles.scoreRow}>
-        <View style={styles.teamBlock}>
-          <Image source={{ uri: match.logoA }} style={styles.teamLogo} />
-          <Text style={styles.teamName}>{match.teamA}</Text>
+      <View className="flex-row justify-between items-center px-4 py-4">
+        <View className="items-center w-20">
+          <Image source={{ uri: match.logoA }} className="w-11 h-11 rounded-full mb-2 bg-[#222222]" />
+          <Text className="text-white text-xs font-semibold text-center">{match.teamA}</Text>
         </View>
-        <View style={styles.centerBlock}>
-          <View style={styles.scoreContainer}>
-            <View style={styles.scoreCol}>
-              <Text style={styles.scoreText}>{match.scoreA}</Text>
-              <Text style={[styles.oversText, { color: colors.subText }]}>{match.oversA}</Text>
+        <View className="flex-1 items-center justify-center">
+          <View className="flex-row items-center justify-center w-full">
+            <View className="items-center w-[70px]">
+              <Text className="text-white text-[22px] font-bold">{match.scoreA}</Text>
+              <Text className="text-[11px] mt-1 text-[#888888]">{match.oversA}</Text>
             </View>
-            <View style={{ alignItems: 'center', paddingHorizontal: 8 }}>
-              <Text style={{ color: colors.primary, fontSize: 11, fontWeight: '600' }}>{match.winner}</Text>
-              <Text style={{ color: colors.subText, fontSize: 10, marginTop: 4 }}>{match.margin}</Text>
+            <View className="items-center px-2">
+              <Text className="text-[#23c55e] text-[11px] font-semibold">{match.winner}</Text>
+              <Text className="text-[#888888] text-[10px] mt-1">{match.margin}</Text>
             </View>
-            <View style={styles.scoreCol}>
-              <Text style={styles.scoreText}>{match.scoreB}</Text>
-              <Text style={[styles.oversText, { color: colors.subText }]}>{match.oversB}</Text>
+            <View className="items-center w-[70px]">
+              <Text className="text-white text-[22px] font-bold">{match.scoreB}</Text>
+              <Text className="text-[11px] mt-1 text-[#888888]">{match.oversB}</Text>
             </View>
           </View>
         </View>
-        <View style={styles.teamBlock}>
-          <Image source={{ uri: match.logoB }} style={styles.teamLogo} />
-          <Text style={styles.teamName}>{match.teamB}</Text>
+        <View className="items-center w-20">
+          <Image source={{ uri: match.logoB }} className="w-11 h-11 rounded-full mb-2 bg-[#222222]" />
+          <Text className="text-white text-xs font-semibold text-center">{match.teamB}</Text>
         </View>
       </View>
-      <View style={styles.cardFooter}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <Feather name="map-pin" size={12} color={colors.primary} />
-          <Text style={styles.venueText}>{match.venue}</Text>
+      <View className="flex-row justify-between items-center p-3 border-t border-[#222222]">
+        <View className="flex-row items-center flex-1">
+          <Feather name="map-pin" size={12} color="#23c55e" />
+          <Text className="text-[#888888] text-[11px] ml-[6px]">{match.venue}</Text>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity style={styles.scorecardBtn}>
-            <Text style={styles.scorecardBtnText}>Scorecard</Text>
+        <View className="flex-row items-center">
+          <TouchableOpacity className="border border-[#1a4024] px-3 py-1 rounded-xl mr-2">
+            <Text className="text-[#23c55e] text-[11px] font-semibold">Scorecard</Text>
           </TouchableOpacity>
-          <Feather name="chevron-right" size={16} color={colors.subText} />
+          <Feather name="chevron-right" size={16} color="#888888" />
         </View>
       </View>
     </View>
@@ -297,74 +299,74 @@ export default function MatchesScreen() {
 
   const MyMatchesSidebarCard = ({ match }) => {
     const isLive = match.type === 'LIVE NOW';
-    let borderColor = isLive ? colors.liveBorder : colors.border;
-    let pillBg = isLive ? colors.primary : 'rgba(52, 152, 219, 0.15)';
-    let pillText = isLive ? '#000' : colors.upcoming;
+    let borderColorClass = isLive ? 'border-[#1a4024]' : 'border-[#222222]';
+    let pillBgClass = isLive ? 'bg-[#23c55e]' : 'bg-[#3498db]/15';
+    let pillTextClass = isLive ? 'text-black' : 'text-[#3498db]';
 
     return (
-      <View style={[styles.card, { borderColor, flexDirection: 'row', overflow: 'hidden' }]}>
-        <View style={{ flex: 1 }}>
-          <View style={[styles.cardHeader, { paddingRight: 8 }]}>
-            <View style={[styles.livePill, { backgroundColor: pillBg }]}><Text style={[styles.livePillText, { color: pillText }]}>{match.type}</Text></View>
-            <Text style={styles.leagueText} numberOfLines={1}>{match.league}</Text>
+      <View className={`bg-[#121212] border rounded-xl mb-4 flex-row overflow-hidden ${borderColorClass}`}>
+        <View className="flex-1">
+          <View className="flex-row justify-between items-center p-3 pb-0 pr-2">
+            <View className={`px-[6px] py-[3px] rounded ${pillBgClass}`}><Text className={`text-[9px] font-bold ${pillTextClass}`}>{match.type}</Text></View>
+            <Text className="text-[#888888] text-[10px] tracking-[0.5px] uppercase flex-1 ml-2" numberOfLines={1}>{match.league}</Text>
           </View>
-          <View style={[styles.scoreRow, { paddingHorizontal: 12 }]}>
-            <View style={styles.teamBlock}>
-              <Image source={{ uri: match.logoA }} style={styles.teamLogo} />
-              <Text style={styles.teamName}>{match.teamA}</Text>
+          <View className="flex-row justify-between items-center px-3 py-4">
+            <View className="items-center w-20">
+              <Image source={{ uri: match.logoA }} className="w-11 h-11 rounded-full mb-2 bg-[#222222]" />
+              <Text className="text-white text-xs font-semibold text-center">{match.teamA}</Text>
             </View>
-            <View style={styles.centerBlock}>
+            <View className="flex-1 items-center justify-center">
               {isLive ? (
-                <View style={styles.scoreContainer}>
-                  <View style={styles.scoreCol}>
-                    <Text style={styles.scoreText}>{match.scoreA}</Text>
-                    <Text style={[styles.oversText, { color: colors.primary }]}>{match.oversA}</Text>
+                <View className="flex-row items-center justify-center w-full">
+                  <View className="items-center w-[70px]">
+                    <Text className="text-white text-[22px] font-bold">{match.scoreA}</Text>
+                    <Text className="text-[11px] mt-1 text-[#23c55e]">{match.oversA}</Text>
                   </View>
-                  <View style={[styles.vsCircle, { marginHorizontal: 4 }]}><Text style={styles.vsText}>VS</Text></View>
-                  <View style={styles.scoreCol}>
-                    <Text style={styles.scoreText}>{match.scoreB}</Text>
-                    <Text style={[styles.oversText, { color: colors.primary }]}>{match.oversB}</Text>
+                  <View className="w-8 h-8 rounded-full border border-[#333333] justify-center items-center mx-1"><Text className="text-[#888888] text-[10px]">VS</Text></View>
+                  <View className="items-center w-[70px]">
+                    <Text className="text-white text-[22px] font-bold">{match.scoreB}</Text>
+                    <Text className="text-[11px] mt-1 text-[#23c55e]">{match.oversB}</Text>
                   </View>
                 </View>
               ) : (
-                <View style={{ alignItems: 'center' }}>
-                  <Feather name="calendar" size={14} color={colors.subText} style={{ marginBottom: 4 }} />
-                  <Text style={{ color: colors.subText, fontSize: 10, marginBottom: 2 }}>{match.date}</Text>
-                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>{match.time}</Text>
+                <View className="items-center">
+                  <Feather name="calendar" size={14} color="#888888" className="mb-1" />
+                  <Text className="text-[#888888] text-[10px] mb-[2px]">{match.date}</Text>
+                  <Text className="text-white text-sm font-bold">{match.time}</Text>
                 </View>
               )}
             </View>
-            <View style={styles.teamBlock}>
-              <Image source={{ uri: match.logoB }} style={styles.teamLogo} />
-              <Text style={styles.teamName}>{match.teamB}</Text>
+            <View className="items-center w-20">
+              <Image source={{ uri: match.logoB }} className="w-11 h-11 rounded-full mb-2 bg-[#222222]" />
+              <Text className="text-white text-xs font-semibold text-center">{match.teamB}</Text>
             </View>
           </View>
           {isLive && match.status && (
-            <View style={{ alignItems: 'center', marginBottom: 12 }}>
-              <View style={styles.statusPill}><Text style={styles.statusText}>{match.status}</Text></View>
+            <View className="items-center mb-3">
+              <View className="border border-[#23c55e] bg-[#0a1f10] px-[10px] py-1 rounded-xl"><Text className="text-[#23c55e] text-[11px] font-semibold text-center">{match.status}</Text></View>
             </View>
           )}
-          <View style={[styles.cardFooter, { borderTopWidth: 0, paddingHorizontal: 12, paddingBottom: 16 }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-              <Feather name="map-pin" size={12} color={colors.primary} />
-              <Text style={styles.venueText} numberOfLines={1}>{match.venue}</Text>
+          <View className="flex-row justify-between items-center px-3 pb-4">
+            <View className="flex-row items-center flex-1">
+              <Feather name="map-pin" size={12} color="#23c55e" />
+              <Text className="text-[#888888] text-[11px] ml-[6px]" numberOfLines={1}>{match.venue}</Text>
             </View>
           </View>
         </View>
-        <View style={styles.sidebarCol}>
-          <Text style={styles.sidebarRoleLabel}>YOUR ROLE</Text>
-          <Text style={[styles.sidebarRoleTitle, { color: match.roleColor }]}>{match.roleTitle}</Text>
-          <View style={styles.sidebarIconContainer}>
+        <View className="w-[90px] border-l border-[#222222] bg-[#111111] items-center py-4 px-1">
+          <Text className="text-[#888888] text-[9px] font-bold uppercase mb-1">YOUR ROLE</Text>
+          <Text className="text-xs font-bold mb-3 text-center" style={{ color: match.roleColor }}>{match.roleTitle}</Text>
+          <View className="items-center justify-center mb-3 relative">
             {match.isPlayer ? (
               <>
                 <MaterialCommunityIcons name="tshirt-crew-outline" size={38} color={match.roleColor} />
-                <Text style={styles.sidebarJerseyNum}>{match.roleNumber}</Text>
+                <Text className="absolute text-white text-[11px] font-bold top-3">{match.roleNumber}</Text>
               </>
             ) : (
               <MaterialCommunityIcons name="account-group-outline" size={34} color={match.roleColor} />
             )}
           </View>
-          <Text style={styles.sidebarRoleDesc}>{match.roleDesc}</Text>
+          <Text className="text-[#888888] text-[9px] text-center leading-3">{match.roleDesc}</Text>
         </View>
       </View>
     );
@@ -372,60 +374,60 @@ export default function MatchesScreen() {
 
   const MyMatchesRoleCard = ({ match }) => {
     const isLive = match.type === 'LIVE';
-    let borderColor = isLive ? colors.liveBorder : colors.border;
-    let pillBg = isLive ? colors.primary : 'rgba(52, 152, 219, 0.15)';
-    let pillText = isLive ? '#000' : colors.upcoming;
+    let borderColorClass = isLive ? 'border-[#1a4024]' : 'border-[#222222]';
+    let pillBgClass = isLive ? 'bg-[#23c55e]' : 'bg-[#3498db]/15';
+    let pillTextClass = isLive ? 'text-black' : 'text-[#3498db]';
 
     return (
-      <View style={[styles.card, { borderColor }]}>
-        <View style={styles.cardHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-            <View style={[styles.livePill, { backgroundColor: pillBg, marginRight: 8 }]}><Text style={[styles.livePillText, { color: pillText }]}>{match.type}</Text></View>
-            <Text style={styles.leagueText} numberOfLines={1}>{match.league}</Text>
+      <View className={`bg-[#121212] border rounded-xl mb-4 ${borderColorClass}`}>
+        <View className="flex-row justify-between items-center p-3 pb-0">
+          <View className="flex-row items-center flex-1">
+            <View className={`px-[6px] py-[3px] rounded mr-2 ${pillBgClass}`}><Text className={`text-[9px] font-bold ${pillTextClass}`}>{match.type}</Text></View>
+            <Text className="text-[#888888] text-[10px] tracking-[0.5px] uppercase flex-1" numberOfLines={1}>{match.league}</Text>
           </View>
-          <View style={styles.actionRolePill}>
-            <MaterialCommunityIcons name={match.rolePillIcon} size={12} color={colors.primary} style={{ marginRight: 4 }} />
-            <Text style={styles.actionRoleText}>{match.rolePillText}</Text>
+          <View className="flex-row items-center border border-[#23c55e] px-2 py-1 rounded-md">
+            <MaterialCommunityIcons name={match.rolePillIcon} size={12} color="#23c55e" className="mr-1" />
+            <Text className="text-[#23c55e] text-[10px] font-bold tracking-[0.5px] ml-1">{match.rolePillText}</Text>
           </View>
         </View>
-        <View style={styles.scoreRow}>
-          <View style={styles.teamBlock}>
-            <Image source={{ uri: match.logoA }} style={styles.teamLogo} />
-            <Text style={styles.teamName}>{match.teamA}</Text>
+        <View className="flex-row justify-between items-center px-4 py-4">
+          <View className="items-center w-20">
+            <Image source={{ uri: match.logoA }} className="w-11 h-11 rounded-full mb-2 bg-[#222222]" />
+            <Text className="text-white text-xs font-semibold text-center">{match.teamA}</Text>
           </View>
-          <View style={styles.centerBlock}>
+          <View className="flex-1 items-center justify-center">
             {isLive ? (
-              <View style={styles.scoreContainer}>
-                <View style={styles.scoreCol}>
-                  <Text style={styles.scoreText}>{match.scoreA}</Text>
-                  <Text style={[styles.oversText, { color: colors.primary }]}>{match.oversA}</Text>
+              <View className="flex-row items-center justify-center w-full">
+                <View className="items-center w-[70px]">
+                  <Text className="text-white text-[22px] font-bold">{match.scoreA}</Text>
+                  <Text className="text-[11px] mt-1 text-[#23c55e]">{match.oversA}</Text>
                 </View>
-                <View style={styles.vsCircle}><Text style={styles.vsText}>VS</Text></View>
-                <View style={styles.scoreCol}>
-                  <Text style={styles.scoreText}>{match.scoreB}</Text>
-                  <Text style={[styles.oversText, { color: colors.primary }]}>{match.oversB}</Text>
+                <View className="w-8 h-8 rounded-full border border-[#333333] justify-center items-center mx-2"><Text className="text-[#888888] text-[10px]">VS</Text></View>
+                <View className="items-center w-[70px]">
+                  <Text className="text-white text-[22px] font-bold">{match.scoreB}</Text>
+                  <Text className="text-[11px] mt-1 text-[#23c55e]">{match.oversB}</Text>
                 </View>
               </View>
             ) : (
-              <View style={{ alignItems: 'center' }}>
-                <Text style={{ color: colors.subText, fontSize: 10, marginBottom: 2 }}>{match.date}</Text>
-                <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>{match.time}</Text>
+              <View className="items-center">
+                <Text className="text-[#888888] text-[10px] mb-[2px]">{match.date}</Text>
+                <Text className="text-white text-sm font-bold">{match.time}</Text>
               </View>
             )}
           </View>
-          <View style={styles.teamBlock}>
-            <Image source={{ uri: match.logoB }} style={styles.teamLogo} />
-            <Text style={styles.teamName}>{match.teamB}</Text>
+          <View className="items-center w-20">
+            <Image source={{ uri: match.logoB }} className="w-11 h-11 rounded-full mb-2 bg-[#222222]" />
+            <Text className="text-white text-xs font-semibold text-center">{match.teamB}</Text>
           </View>
         </View>
-        <View style={styles.cardFooter}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-            <Feather name="map-pin" size={12} color={colors.primary} />
-            <Text style={styles.venueText} numberOfLines={1}>{match.venue}</Text>
+        <View className="flex-row justify-between items-center p-3 border-t border-[#222222]">
+          <View className="flex-row items-center flex-1">
+            <Feather name="map-pin" size={12} color="#23c55e" />
+            <Text className="text-[#888888] text-[11px] ml-[6px]" numberOfLines={1}>{match.venue}</Text>
           </View>
-          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={{ color: colors.primary, fontSize: 11, fontWeight: 'bold', marginRight: 4 }}>View Details</Text>
-            <Feather name="chevron-right" size={14} color={colors.primary} />
+          <TouchableOpacity className="flex-row items-center">
+            <Text className="text-[#23c55e] text-[11px] font-bold mr-1">View Details</Text>
+            <Feather name="chevron-right" size={14} color="#23c55e" />
           </TouchableOpacity>
         </View>
       </View>
@@ -437,47 +439,47 @@ export default function MatchesScreen() {
   // ==========================================
   
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
+    <SafeAreaView className="flex-1 bg-[#0a0a0a]">
       
-      <View style={styles.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={[styles.logoIcon, { color: colors.primary }]}>P</Text>
-          <Text style={styles.headerTitle}>Matches</Text>
+      <View className="flex-row items-center justify-between px-4 py-3">
+        <View className="flex-row items-center">
+          <Text className="text-2xl font-black italic mr-3 text-[#23c55e]">P</Text>
+          <Text className="text-[22px] font-bold text-white">Matches</Text>
         </View>
-        <View style={styles.headerActions}>
+        <View className="flex-row items-center">
           {/* --- NOTIFICATIONS ONPRESS ADDED HERE --- */}
-          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Notifications')}>
-            <Feather name="bell" size={22} color={colors.text} />
-            <View style={[styles.badge, { backgroundColor: colors.primary }]}><Text style={styles.badgeText}>3</Text></View>
+          <TouchableOpacity className="relative ml-5" onPress={() => navigation.navigate('Notifications')}>
+            <Feather name="bell" size={22} color="#ffffff" />
+            <View className="absolute -top-1 -right-[6px] rounded-full w-4 h-4 justify-center items-center bg-[#23c55e]"><Text className="text-black text-[9px] font-bold">3</Text></View>
           </TouchableOpacity>
           {/* --- MESSAGES ONPRESS ALREADY HERE --- */}
-          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Messages')}>
-            <Feather name="message-square" size={22} color={colors.text} />
-            <View style={[styles.badge, { backgroundColor: colors.primary }]}><Text style={styles.badgeText}>2</Text></View>
+          <TouchableOpacity className="relative ml-5" onPress={() => navigation.navigate('Messages')}>
+            <Feather name="message-square" size={22} color="#ffffff" />
+            <View className="absolute -top-1 -right-[6px] rounded-full w-4 h-4 justify-center items-center bg-[#23c55e]"><Text className="text-black text-[9px] font-bold">2</Text></View>
           </TouchableOpacity>
         </View>
       </View>
 
-      <View style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScroll}>
+      <View className="border-b border-[#222222]">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="px-2">
           {tabs.map((tab) => (
             <TouchableOpacity 
               key={tab} 
-              style={[styles.tab, activeTab === tab && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
+              className={`py-[14px] px-4 mr-1 ${activeTab === tab ? 'border-b-2 border-[#23c55e]' : ''}`}
               onPress={() => setActiveTab(tab)}
             >
-              <Text style={[styles.tabText, { color: activeTab === tab ? colors.primary : colors.subText }]}>{tab}</Text>
+              <Text className={`text-xs font-bold tracking-[0.5px] ${activeTab === tab ? 'text-[#23c55e]' : 'text-[#888888]'}`}>{tab}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerClassName="pb-[100px] px-4 pt-4" showsVerticalScrollIndicator={false}>
         
         {/* --- LIVE TAB --- */}
         {activeTab === 'LIVE' && (
           <View>
-            <SectionHeader icon="record-circle-outline" title="LIVE MATCHES" iconColor={colors.primary} />
+            <SectionHeader icon="record-circle-outline" title="LIVE MATCHES" iconColor="#23c55e" />
             {liveMatches.map(m => <LiveCard key={m.id} match={m} />)}
           </View>
         )}
@@ -485,7 +487,7 @@ export default function MatchesScreen() {
         {/* --- UPCOMING TAB --- */}
         {activeTab === 'UPCOMING' && (
           <View>
-            <SectionHeader icon="calendar-month-outline" title="UPCOMING MATCHES" iconColor={colors.primary} />
+            <SectionHeader icon="calendar-month-outline" title="UPCOMING MATCHES" iconColor="#23c55e" />
             {upcomingMatches.map(m => <UpcomingCard key={m.id} match={m} />)}
           </View>
         )}
@@ -509,38 +511,38 @@ export default function MatchesScreen() {
         {/* --- MY MATCHES TAB --- */}
         {activeTab === 'MY MATCHES' && (
           <View>
-             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, marginTop: 8 }}>
+             <View className="flex-row justify-between items-start mb-4 mt-2">
                <View>
-                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                   <MaterialCommunityIcons name="account" size={20} color={colors.primary} style={{ marginRight: 8 }} />
-                   <Text style={[styles.sectionTitle, { color: colors.text }]}>MY MATCHES</Text>
+                 <View className="flex-row items-center">
+                   <MaterialCommunityIcons name="account" size={20} color="#23c55e" className="mr-2" />
+                   <Text className="text-xs font-bold tracking-widest text-white">MY MATCHES</Text>
                  </View>
-                 <Text style={{ color: colors.subText, fontSize: 12, marginTop: 4 }}>Matches you're part of</Text>
+                 <Text className="text-[#888888] text-xs mt-1">Matches you're part of</Text>
                </View>
-               <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
-                 <Text style={{ color: colors.primary, fontSize: 12, marginRight: 4 }}>Filter</Text>
-                 <Feather name="sliders" size={14} color={colors.primary} />
+               <TouchableOpacity className="flex-row items-center">
+                 <Text className="text-[#23c55e] text-xs mr-1">Filter</Text>
+                 <Feather name="sliders" size={14} color="#23c55e" />
                </TouchableOpacity>
              </View>
 
              {playingMatches.map(m => <MyMatchesSidebarCard key={m.id} match={m} />)}
 
-             <View style={{ marginTop: 12, marginBottom: 16 }}>
-               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                 <MaterialCommunityIcons name="shield-check" size={18} color={colors.primary} style={{ marginRight: 8 }} />
-                 <Text style={[styles.sectionTitle, { color: colors.text }]}>ORGANIZING ({organizingMatches.length})</Text>
+             <View className="mt-3 mb-4">
+               <View className="flex-row items-center">
+                 <MaterialCommunityIcons name="shield-check" size={18} color="#23c55e" className="mr-2" />
+                 <Text className="text-xs font-bold tracking-widest text-white">ORGANIZING ({organizingMatches.length})</Text>
                </View>
-               <Text style={{ color: colors.subText, fontSize: 11, marginTop: 4 }}>Matches you are organizing or managing</Text>
+               <Text className="text-[#888888] text-[11px] mt-1">Matches you are organizing or managing</Text>
              </View>
              
              {organizingMatches.map(m => <MyMatchesRoleCard key={m.id} match={m} />)}
 
-             <View style={{ marginTop: 12, marginBottom: 16 }}>
-               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                 <MaterialCommunityIcons name="clipboard-check" size={18} color={colors.primary} style={{ marginRight: 8 }} />
-                 <Text style={[styles.sectionTitle, { color: colors.text }]}>SCORING ({scoringMatches.length})</Text>
+             <View className="mt-3 mb-4">
+               <View className="flex-row items-center">
+                 <MaterialCommunityIcons name="clipboard-check" size={18} color="#23c55e" className="mr-2" />
+                 <Text className="text-xs font-bold tracking-widest text-white">SCORING ({scoringMatches.length})</Text>
                </View>
-               <Text style={{ color: colors.subText, fontSize: 11, marginTop: 4 }}>Matches where you are scoring</Text>
+               <Text className="text-[#888888] text-[11px] mt-1">Matches where you are scoring</Text>
              </View>
              
              {scoringMatches.map(m => <MyMatchesRoleCard key={m.id} match={m} />)}
@@ -551,74 +553,3 @@ export default function MatchesScreen() {
     </SafeAreaView>
   );
 }
-
-// ==========================================
-// UNIFIED PIXEL-PERFECT STYLES
-// ==========================================
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
-  logoIcon: { fontSize: 24, fontWeight: '900', fontStyle: 'italic', marginRight: 12 },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
-  headerActions: { flexDirection: 'row', alignItems: 'center' },
-  iconBtn: { position: 'relative', marginLeft: 20 },
-  badge: { position: 'absolute', top: -4, right: -6, borderRadius: 10, width: 16, height: 16, justifyContent: 'center', alignItems: 'center' },
-  badgeText: { color: '#000', fontSize: 9, fontWeight: 'bold' },
-  tabScroll: { paddingHorizontal: 8 },
-  tab: { paddingVertical: 14, paddingHorizontal: 16, marginRight: 4 },
-  tabText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
-  scrollContent: { paddingBottom: 100, paddingHorizontal: 16, paddingTop: 16 },
-  
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, marginTop: 8 },
-  sectionTitle: { fontSize: 12, fontWeight: 'bold', letterSpacing: 1 },
-  
-  card: { backgroundColor: '#121212', borderWidth: 1, borderRadius: 12, marginBottom: 16 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, paddingBottom: 0 },
-  livePill: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
-  livePillText: { fontSize: 9, fontWeight: 'bold' },
-  leagueText: { color: '#888', fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase', flex: 1 },
-  
-  scoreRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16 },
-  teamBlock: { alignItems: 'center', width: 80 },
-  teamLogo: { width: 44, height: 44, borderRadius: 22, marginBottom: 8, backgroundColor: '#222' },
-  teamName: { color: '#fff', fontSize: 12, fontWeight: '600', textAlign: 'center' },
-  
-  centerBlock: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  scoreContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' },
-  scoreCol: { alignItems: 'center', width: 70 },
-  scoreText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  oversText: { fontSize: 11, marginTop: 4 },
-  
-  vsCircle: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: '#333', justifyContent: 'center', alignItems: 'center', marginHorizontal: 8 },
-  vsText: { color: '#888', fontSize: 10 },
-  statusText: { color: '#23c55e', fontSize: 11, fontWeight: '600', textAlign: 'center' },
-  statusPill: { borderWidth: 1, borderColor: '#23c55e', backgroundColor: '#0a1f10', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginTop: 12 },
-  
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderTopWidth: 1, borderTopColor: '#222' },
-  venueText: { color: '#888', fontSize: 11, marginLeft: 6 },
-  
-  /* Upcoming Card Styles */
-  upcomingBigLogo: { width: 56, height: 56, borderRadius: 28, marginBottom: 8, backgroundColor: '#222' },
-  upcomingBigTeamName: { color: '#fff', fontSize: 13, fontWeight: '600', textAlign: 'center' },
-  metaText: { color: '#888', fontSize: 11 },
-  followBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#23c55e', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: 'transparent' },
-  followBtnText: { color: '#23c55e', fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
-  
-  /* Completed Card Styles */
-  completedHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
-  completedDateText: { color: '#888', fontSize: 11 },
-  scorecardBtn: { borderWidth: 1, borderColor: '#1a4024', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginRight: 8 },
-  scorecardBtnText: { color: '#23c55e', fontSize: 11, fontWeight: '600' },
-
-  /* My Matches Sidebar Styles */
-  sidebarCol: { width: 90, borderLeftWidth: 1, borderLeftColor: '#222', backgroundColor: '#111', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4 },
-  sidebarRoleLabel: { color: '#888', fontSize: 9, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 4 },
-  sidebarRoleTitle: { fontSize: 12, fontWeight: 'bold', marginBottom: 12, textAlign: 'center' },
-  sidebarIconContainer: { alignItems: 'center', justifyContent: 'center', marginBottom: 12, position: 'relative' },
-  sidebarJerseyNum: { position: 'absolute', color: '#fff', fontSize: 11, fontWeight: 'bold', top: 12 },
-  sidebarRoleDesc: { color: '#888', fontSize: 9, textAlign: 'center', lineHeight: 12 },
-
-  /* My Matches Role Pill Styles */
-  actionRolePill: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#23c55e', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  actionRoleText: { color: '#23c55e', fontSize: 10, fontWeight: 'bold', letterSpacing: 0.5 }
-});

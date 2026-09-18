@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -8,8 +8,8 @@ export default function SportCard({ sport, description, icon, isSelected, onPres
 
   return (
     <TouchableOpacity 
+      className="flex-row items-center border rounded-xl p-4 mb-4"
       style={[
-        styles.card, 
         { 
           backgroundColor: theme.inputBg, 
           borderColor: isSelected ? theme.primary : theme.inputBorder 
@@ -19,62 +19,20 @@ export default function SportCard({ sport, description, icon, isSelected, onPres
       onPress={onPress}
       activeOpacity={0.8}
     >
-      <View style={[styles.iconContainer, { backgroundColor: theme.background }]}>
+      <View className="w-12 h-12 rounded-full justify-center items-center mr-4" style={{ backgroundColor: theme.background }}>
         <Ionicons name={icon} size={32} color={theme.text} />
       </View>
-      <View style={styles.textContainer}>
-        <Text style={[styles.title, { color: theme.text }]}>{sport}</Text>
-        <Text style={[styles.description, { color: theme.subText }]}>{description}</Text>
+      <View className="flex-1 pr-4">
+        <Text className="text-[15px] font-semibold mb-1" style={{ color: theme.text }}>{sport}</Text>
+        <Text className="text-xs leading-4" style={{ color: theme.subText }}>{description}</Text>
       </View>
-      <View style={styles.radioContainer}>
+      <View className="justify-center items-center">
         {isSelected ? (
           <Ionicons name="checkmark-circle" size={24} color={theme.primary} />
         ) : (
-          <View style={[styles.emptyCircle, { borderColor: theme.subText }]} />
+          <View className="w-[22px] h-[22px] rounded-full border" style={{ borderColor: theme.subText }} />
         )}
       </View>
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  textContainer: {
-    flex: 1,
-    paddingRight: 16,
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  description: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  radioContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1,
-  }
-});

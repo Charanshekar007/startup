@@ -5,8 +5,7 @@ import {
   TouchableOpacity, 
   ScrollView, 
   KeyboardAvoidingView, 
-  Platform, 
-  StyleSheet 
+  Platform 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -63,40 +62,40 @@ export default function SignUpScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: theme.background }}>
       <KeyboardAvoidingView 
-        style={styles.flex1} 
+        className="flex-1" 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerClassName="px-6 pb-8 pt-4" showsVerticalScrollIndicator={false}>
           
           {/* Header */}
-          <View style={styles.header}>
+          <View className="flex-row justify-between items-center mb-8">
             <TouchableOpacity hitSlop={{top: 10, bottom: 10, left: 10, right: 10}} onPress={() => navigation.goBack()}>
               <Feather name="arrow-left" size={24} color={theme.text} />
             </TouchableOpacity>
             
-            <View style={styles.logoPlaceholder}>
-              <Text style={[styles.logoText, { color: theme.primary }]}>P</Text>
+            <View className="w-8 h-8 justify-center items-center">
+              <Text className="text-2xl font-black italic" style={{ color: theme.primary }}>P</Text>
             </View>
             
-            <View style={{ width: 24 }} />
+            <View className="w-6" />
           </View>
 
           {/* Title Section */}
-          <View style={styles.titleSection}>
+          <View className="flex-row justify-between items-start mb-8">
             <View>
-              <Text style={[styles.title, { color: theme.text }]}>Sign Up</Text>
-              <Text style={[styles.subtitle, { color: theme.subText }]}>Create your account to get started</Text>
+              <Text className="text-[28px] font-bold mb-2" style={{ color: theme.text }}>Sign Up</Text>
+              <Text className="text-sm" style={{ color: theme.subText }}>Create your account to get started</Text>
             </View>
-            <View style={styles.badge}>
+            <View className="flex-row items-center mt-2">
               <MaterialCommunityIcons name="shield-check-outline" size={14} color={theme.subText} />
-              <Text style={[styles.badgeText, { color: theme.subText }]}>Secure & Private</Text>
+              <Text className="text-xs ml-1" style={{ color: theme.subText }}>Secure & Private</Text>
             </View>
           </View>
 
           {/* Form */}
-          <View style={styles.form}>
+          <View className="mb-4">
             <InputField 
               label="Full Name" 
               placeholder="e.g. Arjun Reddy" 
@@ -136,7 +135,7 @@ export default function SignUpScreen() {
           />
 
           {errorMessage ? (
-            <Text style={[styles.errorText, { color: '#FF453A' }]}>
+            <Text className="text-[13px] font-semibold text-center mb-3 text-[#FF453A]">
               {errorMessage}
             </Text>
           ) : null}
@@ -146,22 +145,22 @@ export default function SignUpScreen() {
             onPress={handleSignUp} 
           />
 
-          <View style={styles.dividerContainer}>
-            <View style={[styles.dividerLine, { backgroundColor: theme.divider }]} />
-            <Text style={[styles.dividerText, { color: theme.subText }]}>OR</Text>
-            <View style={[styles.dividerLine, { backgroundColor: theme.divider }]} />
+          <View className="flex-row items-center my-6">
+            <View className="flex-1 h-[1px]" style={{ backgroundColor: theme.divider }} />
+            <Text className="px-4 text-xs" style={{ color: theme.subText }}>OR</Text>
+            <View className="flex-1 h-[1px]" style={{ backgroundColor: theme.divider }} />
           </View>
 
           <GoogleButton onPress={() => {}} />
 
-          <View style={styles.loginContainer}>
-            <Text style={[styles.footerText, { color: theme.subText }]}>Already have an account? </Text>
+          <View className="flex-row justify-center mb-8">
+            <Text className="text-sm" style={{ color: theme.subText }}>Already have an account? </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-              <Text style={[styles.loginText, { color: theme.primary }]}>Log In</Text>
+              <Text className="text-sm font-semibold" style={{ color: theme.primary }}>Log In</Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={[styles.termsText, { color: theme.subText }]}>
+          <Text className="text-xs text-center leading-[18px]" style={{ color: theme.subText }}>
             By signing up, you agree to our <Text style={{ color: theme.primary }}>Terms of Service</Text>{'\n'}
             and <Text style={{ color: theme.primary }}>Privacy Policy</Text>
           </Text>
@@ -171,26 +170,3 @@ export default function SignUpScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  flex1: { flex: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingBottom: 32, paddingTop: 16 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 },
-  logoPlaceholder: { width: 32, height: 32, justifyContent: 'center', alignItems: 'center' },
-  logoText: { fontSize: 24, fontWeight: '900', fontStyle: 'italic' },
-  titleSection: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 },
-  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
-  subtitle: { fontSize: 14 },
-  badge: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  badgeText: { fontSize: 12, marginLeft: 4 },
-  form: { marginBottom: 16 },
-  errorText: { fontSize: 13, fontWeight: '600', textAlign: 'center', marginBottom: 12 },
-  dividerContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 24 },
-  dividerLine: { flex: 1, height: 1 },
-  dividerText: { paddingHorizontal: 16, fontSize: 12 },
-  loginContainer: { flexDirection: 'row', justifyContent: 'center', marginBottom: 32 },
-  footerText: { fontSize: 14 },
-  loginText: { fontSize: 14, fontWeight: '600' },
-  termsText: { fontSize: 12, textAlign: 'center', lineHeight: 18 },
-});

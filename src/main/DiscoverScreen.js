@@ -1,21 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Dimensions, Keyboard } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, Image, Dimensions, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
-
-const theme = {
-  bg: '#0a0a0a',
-  card: '#121212',
-  cardLight: '#161616',
-  primary: '#23c55e',
-  text: '#ffffff',
-  subText: '#888888',
-  border: '#222222',
-  iconBg: 'rgba(35, 197, 94, 0.1)', // Subtle green tint for category icons
-};
 
 // ==========================================
 // MOCK DATA
@@ -74,64 +63,68 @@ export default function DiscoverScreen() {
   // VIEW 1: MAIN DISCOVER DASHBOARD
   // ==========================================
   const renderDiscoverMain = () => (
-    <View style={styles.container}>
+    <View className="flex-1 bg-[#0a0a0a]">
       {/* HEADER */}
-      <View style={styles.header}>
+      <View className="flex-row justify-between items-start px-4 pt-4 pb-2">
         <View>
-          <Text style={styles.pageTitle}>Discover</Text>
-          <Text style={styles.pageSubtitle}>Explore the cricket world around you.</Text>
+          <Text className="text-[32px] font-bold text-white mb-1">Discover</Text>
+          <Text className="text-[13px] text-[#888888]">Explore the cricket world around you.</Text>
         </View>
-        <TouchableOpacity style={styles.bellBtn} onPress={() => navigation.navigate('Notifications')}>
-          <Feather name="bell" size={24} color={theme.text} />
-          <View style={styles.bellBadge} />
+        <TouchableOpacity className="relative mt-2" onPress={() => navigation.navigate('Notifications')}>
+          <Feather name="bell" size={24} color="#ffffff" />
+          <View className="absolute -top-[2px] -right-[2px] w-2 h-2 rounded-full bg-[#e74c3c]" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerClassName="pb-[100px]" showsVerticalScrollIndicator={false}>
         
         {/* FAKE SEARCH BAR (Triggers Search State) */}
-        <View style={styles.searchSection}>
+        <View className="flex-row px-4 mt-4 mb-6 items-center">
           <TouchableOpacity 
-            style={[styles.searchBar, { flex: 1 }]} 
+            className="flex-1 flex-row items-center bg-[#161616] rounded-xl px-4 h-12 border border-[#222222]" 
             onPress={() => setIsSearchActive(true)}
             activeOpacity={0.9}
           >
-            <Feather name="search" size={20} color={theme.subText} style={{ marginRight: 10 }} />
-            <Text style={styles.searchPlaceholder}>Search players, teams, matches...</Text>
+            <Feather name="search" size={20} color="#888888" className="mr-[10px]" />
+            <Text className="text-[#888888] text-[15px]">Search players, teams, matches...</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.filterBtn}>
-            <Feather name="sliders" size={20} color={theme.text} />
+          <TouchableOpacity className="w-12 h-12 rounded-xl bg-[#161616] border border-[#222222] items-center justify-center ml-3">
+            <Feather name="sliders" size={20} color="#ffffff" />
           </TouchableOpacity>
         </View>
 
         {/* CATEGORY GRID */}
-        <View style={styles.gridContainer}>
+        <View className="flex-row flex-wrap justify-between px-4 mb-4">
           {DISCOVER_CATEGORIES.map((cat) => (
-            <TouchableOpacity key={cat.id} style={styles.gridItem}>
-              <View style={styles.gridIconContainer}>
-                <MaterialCommunityIcons name={cat.icon} size={28} color={theme.primary} />
+            <TouchableOpacity 
+              key={cat.id} 
+              className="bg-[#121212] rounded-2xl p-4 items-center mb-3 border border-[#222222]"
+              style={{ width: (width - 44) / 3 }}
+            >
+              <View className="mb-3">
+                <MaterialCommunityIcons name={cat.icon} size={28} color="#23c55e" />
               </View>
-              <Text style={styles.gridTitle}>{cat.title}</Text>
-              <Text style={styles.gridSubtitle}>{cat.subtitle}</Text>
+              <Text className="text-white text-sm font-bold text-center mb-1">{cat.title}</Text>
+              <Text className="text-[#888888] text-[10px] text-center">{cat.subtitle}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
         {/* TRENDING NOW SCROLL */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Trending Now</Text>
-          <TouchableOpacity><Text style={styles.viewAllText}>View All</Text></TouchableOpacity>
+        <View className="flex-row justify-between items-center px-4 mb-4 mt-2">
+          <Text className="text-lg font-bold text-white">Trending Now</Text>
+          <TouchableOpacity><Text className="text-[13px] font-bold text-[#23c55e]">View All</Text></TouchableOpacity>
         </View>
         
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendingScroll}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="px-4">
           {TRENDING_NOW.map(item => (
-            <TouchableOpacity key={item.id} style={styles.trendingCard}>
-              <Image source={{ uri: item.image }} style={styles.trendingImage} />
-              <View style={styles.trendingOverlay}>
-                <Text style={styles.trendingCardTitle} numberOfLines={1}>{item.title}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  {item.isLive && <View style={styles.liveDot} />}
-                  <Text style={[styles.trendingCardSub, item.isLive && { color: theme.primary }]}>{item.subtitle}</Text>
+            <TouchableOpacity key={item.id} className="w-[140px] h-[180px] rounded-2xl mr-4 overflow-hidden border border-[#222222]">
+              <Image source={{ uri: item.image }} className="w-full h-full" />
+              <View className="absolute bottom-0 left-0 right-0 p-3 bg-black/60 pt-6">
+                <Text className="text-white text-sm font-bold mb-1" numberOfLines={1}>{item.title}</Text>
+                <View className="flex-row items-center">
+                  {item.isLive && <View className="w-[6px] h-[6px] rounded-full bg-[#23c55e] mr-1" />}
+                  <Text className={`text-[11px] ${item.isLive ? 'text-[#23c55e]' : 'text-[#888888]'}`}>{item.subtitle}</Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -145,78 +138,78 @@ export default function DiscoverScreen() {
   // VIEW 2: SEARCH RESULTS
   // ==========================================
   const renderSearchResults = () => (
-    <View style={styles.container}>
+    <View className="flex-1 bg-[#0a0a0a]">
       {/* SEARCH HEADER */}
-      <View style={styles.searchActiveHeader}>
+      <View className="flex-row items-center px-4 pt-4 pb-3">
         <TouchableOpacity 
           onPress={() => {
             setIsSearchActive(false);
             setSearchQuery('');
             Keyboard.dismiss();
           }} 
-          style={{ paddingRight: 16 }}
+          className="pr-4"
         >
-          <Feather name="arrow-left" size={24} color={theme.text} />
+          <Feather name="arrow-left" size={24} color="#ffffff" />
         </TouchableOpacity>
         
-        <View style={[styles.searchBar, { flex: 1, height: 44, marginVertical: 0 }]}>
-          <Feather name="search" size={18} color={theme.subText} style={{ marginRight: 10 }} />
+        <View className="flex-1 flex-row items-center bg-[#161616] rounded-xl px-4 h-11 border border-[#222222]">
+          <Feather name="search" size={18} color="#888888" className="mr-[10px]" />
           <TextInput 
-            style={styles.searchInputActive}
+            className="flex-1 text-white text-[15px]"
             placeholder="Search..."
-            placeholderTextColor={theme.subText}
+            placeholderTextColor="#888888"
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoFocus={true}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Feather name="x-circle" size={18} color={theme.subText} />
+              <Feather name="x-circle" size={18} color="#888888" />
             </TouchableOpacity>
           )}
         </View>
 
-        <TouchableOpacity style={{ paddingLeft: 16 }}>
-          <Feather name="sliders" size={20} color={theme.text} />
+        <TouchableOpacity className="pl-4">
+          <Feather name="sliders" size={20} color="#ffffff" />
         </TouchableOpacity>
       </View>
 
       {/* SEARCH TABS */}
-      <View style={styles.searchTabsWrapper}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.searchTabsScroll}>
+      <View className="border-b border-[#222222] pb-0">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="px-4">
           {SEARCH_TABS.map(tab => (
             <TouchableOpacity 
               key={tab} 
-              style={[styles.searchTab, activeSearchTab === tab && styles.searchTabActive]}
+              className={`pb-3 mr-6 ${activeSearchTab === tab ? 'border-b-2 border-[#23c55e]' : ''}`}
               onPress={() => setActiveSearchTab(tab)}
             >
-              <Text style={[styles.searchTabText, activeSearchTab === tab && styles.searchTabTextActive]}>{tab}</Text>
+              <Text className={`text-sm font-semibold ${activeSearchTab === tab ? 'text-white' : 'text-[#888888]'}`}>{tab}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerClassName="pb-[100px]" showsVerticalScrollIndicator={false}>
         
         {/* PLAYERS RESULTS */}
         {(activeSearchTab === 'All' || activeSearchTab === 'Players') && (
-          <View style={styles.resultsSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.resultsSectionTitle}>Players</Text>
-              {activeSearchTab === 'All' && <TouchableOpacity><Text style={styles.viewAllText}>See All</Text></TouchableOpacity>}
+          <View className="px-4 mt-4">
+            <View className="flex-row justify-between items-center px-4 mb-4 mt-2">
+              <Text className="text-base font-bold text-white">Players</Text>
+              {activeSearchTab === 'All' && <TouchableOpacity><Text className="text-[13px] font-bold text-[#23c55e]">See All</Text></TouchableOpacity>}
             </View>
-            <View style={styles.resultsCard}>
+            <View className="bg-[#121212] rounded-2xl border border-[#222222] overflow-hidden">
               {SEARCH_RESULTS.players.map((p, index) => (
-                <TouchableOpacity key={p.id} style={[styles.resultRow, index !== SEARCH_RESULTS.players.length -1 && styles.borderBottom]}>
-                  <Image source={{ uri: p.avatar }} style={styles.resultAvatar} />
-                  <View style={styles.resultInfo}>
-                    <Text style={styles.resultName}>{p.name}</Text>
-                    <Text style={styles.resultSub}>{p.role}</Text>
-                    <Text style={styles.resultSubLoc}>{p.location}</Text>
+                <TouchableOpacity key={p.id} className={`flex-row p-4 items-center ${index !== SEARCH_RESULTS.players.length - 1 ? 'border-b border-[#222222]' : ''}`}>
+                  <Image source={{ uri: p.avatar }} className="w-11 h-11 rounded-full mr-3" />
+                  <View className="flex-1">
+                    <Text className="text-white text-[15px] font-bold mb-[2px]">{p.name}</Text>
+                    <Text className="text-[#888888] text-xs mb-[2px]">{p.role}</Text>
+                    <Text className="text-[#666666] text-[11px]">{p.location}</Text>
                   </View>
-                  <View style={styles.ratingPill}>
-                    <Feather name="star" size={10} color={theme.primary} style={{ marginRight: 4 }} />
-                    <Text style={styles.ratingText}>{p.rating}</Text>
+                  <View className="flex-row items-center bg-[#161616] border border-[#222222] px-2 py-1 rounded-lg">
+                    <Feather name="star" size={10} color="#23c55e" className="mr-1" />
+                    <Text className="text-white text-[11px] font-bold">{p.rating}</Text>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -226,18 +219,18 @@ export default function DiscoverScreen() {
 
         {/* TEAMS RESULTS */}
         {(activeSearchTab === 'All' || activeSearchTab === 'Teams') && (
-          <View style={styles.resultsSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.resultsSectionTitle}>Teams</Text>
-              {activeSearchTab === 'All' && <TouchableOpacity><Text style={styles.viewAllText}>See All</Text></TouchableOpacity>}
+          <View className="px-4 mt-4">
+            <View className="flex-row justify-between items-center px-4 mb-4 mt-2">
+              <Text className="text-base font-bold text-white">Teams</Text>
+              {activeSearchTab === 'All' && <TouchableOpacity><Text className="text-[13px] font-bold text-[#23c55e]">See All</Text></TouchableOpacity>}
             </View>
-            <View style={styles.resultsCard}>
+            <View className="bg-[#121212] rounded-2xl border border-[#222222] overflow-hidden">
               {SEARCH_RESULTS.teams.map((t, index) => (
-                <TouchableOpacity key={t.id} style={[styles.resultRow, index !== SEARCH_RESULTS.teams.length -1 && styles.borderBottom]}>
-                  <Image source={{ uri: t.logo }} style={styles.resultLogo} />
-                  <View style={styles.resultInfo}>
-                    <Text style={styles.resultName}>{t.name}</Text>
-                    <Text style={styles.resultSubLoc}>{t.location}</Text>
+                <TouchableOpacity key={t.id} className={`flex-row p-4 items-center ${index !== SEARCH_RESULTS.teams.length - 1 ? 'border-b border-[#222222]' : ''}`}>
+                  <Image source={{ uri: t.logo }} className="w-11 h-11 rounded-full mr-3 bg-[#161616]" />
+                  <View className="flex-1">
+                    <Text className="text-white text-[15px] font-bold mb-[2px]">{t.name}</Text>
+                    <Text className="text-[#666666] text-[11px]">{t.location}</Text>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -247,32 +240,32 @@ export default function DiscoverScreen() {
 
         {/* MATCHES RESULTS */}
         {(activeSearchTab === 'All' || activeSearchTab === 'Matches') && (
-          <View style={styles.resultsSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.resultsSectionTitle}>Matches</Text>
-              {activeSearchTab === 'All' && <TouchableOpacity><Text style={styles.viewAllText}>See All</Text></TouchableOpacity>}
+          <View className="px-4 mt-4">
+            <View className="flex-row justify-between items-center px-4 mb-4 mt-2">
+              <Text className="text-base font-bold text-white">Matches</Text>
+              {activeSearchTab === 'All' && <TouchableOpacity><Text className="text-[13px] font-bold text-[#23c55e]">See All</Text></TouchableOpacity>}
             </View>
             {SEARCH_RESULTS.matches.map((m) => (
-              <TouchableOpacity key={m.id} style={styles.matchCard}>
-                <Text style={styles.matchLeague}>{m.league}</Text>
-                <View style={styles.matchScoreRow}>
-                  <View style={styles.matchTeamBlock}>
-                    <Image source={{ uri: m.logoA }} style={styles.matchLogo} />
-                    <Text style={styles.matchTeamName}>{m.teamA}</Text>
-                    <Text style={styles.matchScore}>{m.scoreA}</Text>
-                    <Text style={styles.matchOvers}>({m.oversA})</Text>
+              <TouchableOpacity key={m.id} className="bg-[#121212] rounded-2xl border border-[#222222] p-4">
+                <Text className="text-[#888888] text-[11px] text-center mb-4">{m.league}</Text>
+                <View className="flex-row justify-between items-center mb-4">
+                  <View className="items-center flex-1">
+                    <Image source={{ uri: m.logoA }} className="w-12 h-12 rounded-full mb-2 bg-[#161616]" />
+                    <Text className="text-[#888888] text-[11px] mb-2">{m.teamA}</Text>
+                    <Text className="text-white text-xl font-bold">{m.scoreA}</Text>
+                    <Text className="text-[#888888] text-[11px] mt-1">({m.oversA})</Text>
                   </View>
-                  <Text style={styles.matchVS}>VS</Text>
-                  <View style={styles.matchTeamBlock}>
-                    <Image source={{ uri: m.logoB }} style={styles.matchLogo} />
-                    <Text style={styles.matchTeamName}>{m.teamB}</Text>
-                    <Text style={styles.matchScore}>{m.scoreB}</Text>
-                    <Text style={styles.matchOvers}>({m.oversB})</Text>
+                  <Text className="text-[#888888] text-xs font-bold w-[30px] text-center">VS</Text>
+                  <View className="items-center flex-1">
+                    <Image source={{ uri: m.logoB }} className="w-12 h-12 rounded-full mb-2 bg-[#161616]" />
+                    <Text className="text-[#888888] text-[11px] mb-2">{m.teamB}</Text>
+                    <Text className="text-white text-xl font-bold">{m.scoreB}</Text>
+                    <Text className="text-[#888888] text-[11px] mt-1">({m.oversB})</Text>
                   </View>
                 </View>
-                <View style={styles.matchFooter}>
-                  <Feather name="map-pin" size={12} color={theme.subText} style={{ marginRight: 6 }} />
-                  <Text style={styles.matchVenue}>{m.venue}</Text>
+                <View className="flex-row items-center border-t border-[#222222] pt-3 mt-2">
+                  <Feather name="map-pin" size={12} color="#888888" className="mr-[6px]" />
+                  <Text className="text-[#888888] text-[11px]">{m.venue}</Text>
                 </View>
               </TouchableOpacity>
             ))}
@@ -281,19 +274,19 @@ export default function DiscoverScreen() {
 
         {/* TOURNAMENTS RESULTS */}
         {(activeSearchTab === 'All' || activeSearchTab === 'Tournaments') && (
-          <View style={styles.resultsSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.resultsSectionTitle}>Tournaments</Text>
+          <View className="px-4 mt-4">
+            <View className="flex-row justify-between items-center px-4 mb-4 mt-2">
+              <Text className="text-base font-bold text-white">Tournaments</Text>
             </View>
-            <View style={styles.resultsCard}>
+            <View className="bg-[#121212] rounded-2xl border border-[#222222] overflow-hidden">
               {SEARCH_RESULTS.tournaments.map((t, index) => (
-                <TouchableOpacity key={t.id} style={[styles.resultRow, index !== SEARCH_RESULTS.tournaments.length -1 && styles.borderBottom]}>
-                  <Image source={{ uri: t.logo }} style={[styles.resultLogo, { borderRadius: 8 }]} />
-                  <View style={styles.resultInfo}>
-                    <Text style={styles.resultName}>{t.name}</Text>
-                    <Text style={styles.resultSub}>{t.season}</Text>
-                    <Text style={styles.resultSub}>{t.dates}</Text>
-                    <Text style={styles.resultSubLoc}><Feather name="map-pin" size={10}/> {t.location}</Text>
+                <TouchableOpacity key={t.id} className={`flex-row p-4 items-center ${index !== SEARCH_RESULTS.tournaments.length - 1 ? 'border-b border-[#222222]' : ''}`}>
+                  <Image source={{ uri: t.logo }} className="w-11 h-11 rounded-lg mr-3 bg-[#161616]" />
+                  <View className="flex-1">
+                    <Text className="text-white text-[15px] font-bold mb-[2px]">{t.name}</Text>
+                    <Text className="text-[#888888] text-xs mb-[2px]">{t.season}</Text>
+                    <Text className="text-[#888888] text-xs mb-[2px]">{t.dates}</Text>
+                    <Text className="text-[#666666] text-[11px]"><Feather name="map-pin" size={10}/> {t.location}</Text>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -306,89 +299,8 @@ export default function DiscoverScreen() {
   );
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
+    <SafeAreaView className="flex-1 bg-[#0a0a0a]">
       {isSearchActive ? renderSearchResults() : renderDiscoverMain()}
     </SafeAreaView>
   );
 }
-
-// ==========================================
-// UNIFIED STYLES
-// ==========================================
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.bg },
-  scrollContent: { paddingBottom: 100 },
-
-  // --- DISCOVER MAIN HEADER ---
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-  pageTitle: { fontSize: 32, fontWeight: 'bold', color: theme.text, marginBottom: 4 },
-  pageSubtitle: { fontSize: 13, color: theme.subText },
-  bellBtn: { position: 'relative', marginTop: 8 },
-  bellBadge: { position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: 4, backgroundColor: '#e74c3c' },
-
-  searchSection: { flexDirection: 'row', paddingHorizontal: 16, marginTop: 16, marginBottom: 24, alignItems: 'center' },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.cardLight, borderRadius: 12, paddingHorizontal: 16, height: 48, borderWidth: 1, borderColor: theme.border },
-  searchPlaceholder: { color: theme.subText, fontSize: 15 },
-  filterBtn: { width: 48, height: 48, borderRadius: 12, backgroundColor: theme.cardLight, borderWidth: 1, borderColor: theme.border, alignItems: 'center', justifyContent: 'center', marginLeft: 12 },
-
-  // --- DISCOVER CATEGORY GRID ---
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 16 },
-  gridItem: { width: (width - 44) / 3, backgroundColor: theme.card, borderRadius: 16, padding: 16, alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: theme.border },
-  gridIconContainer: { marginBottom: 12 },
-  gridTitle: { color: theme.text, fontSize: 14, fontWeight: 'bold', textAlign: 'center', marginBottom: 4 },
-  gridSubtitle: { color: theme.subText, fontSize: 10, textAlign: 'center' },
-
-  // --- TRENDING SCROLL ---
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 16, marginTop: 8 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text },
-  viewAllText: { fontSize: 13, fontWeight: 'bold', color: theme.primary },
-  
-  trendingScroll: { paddingHorizontal: 16 },
-  trendingCard: { width: 140, height: 180, borderRadius: 16, marginRight: 16, overflow: 'hidden', borderWidth: 1, borderColor: theme.border },
-  trendingImage: { width: '100%', height: '100%' },
-  trendingOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 12, backgroundColor: 'rgba(0,0,0,0.6)', paddingTop: 24 },
-  trendingCardTitle: { color: theme.text, fontSize: 14, fontWeight: 'bold', marginBottom: 4 },
-  trendingCardSub: { color: theme.subText, fontSize: 11 },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.primary, marginRight: 4 },
-
-  // --- SEARCH RESULTS STATE ---
-  searchActiveHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 },
-  searchInputActive: { flex: 1, color: theme.text, fontSize: 15 },
-  
-  searchTabsWrapper: { borderBottomWidth: 1, borderBottomColor: theme.border, paddingBottom: 0 },
-  searchTabsScroll: { paddingHorizontal: 16 },
-  searchTab: { paddingBottom: 12, marginRight: 24 },
-  searchTabActive: { borderBottomWidth: 2, borderBottomColor: theme.primary },
-  searchTabText: { color: theme.subText, fontSize: 14, fontWeight: '600' },
-  searchTabTextActive: { color: theme.text },
-
-  resultsSection: { paddingHorizontal: 16, marginTop: 16 },
-  resultsSectionTitle: { fontSize: 16, fontWeight: 'bold', color: theme.text },
-  
-  resultsCard: { backgroundColor: theme.card, borderRadius: 16, borderWidth: 1, borderColor: theme.border, overflow: 'hidden' },
-  resultRow: { flexDirection: 'row', padding: 16, alignItems: 'center' },
-  borderBottom: { borderBottomWidth: 1, borderBottomColor: theme.border },
-  
-  resultAvatar: { width: 44, height: 44, borderRadius: 22, marginRight: 12 },
-  resultLogo: { width: 44, height: 44, borderRadius: 22, marginRight: 12, backgroundColor: theme.cardLight },
-  resultInfo: { flex: 1 },
-  resultName: { color: theme.text, fontSize: 15, fontWeight: 'bold', marginBottom: 2 },
-  resultSub: { color: theme.subText, fontSize: 12, marginBottom: 2 },
-  resultSubLoc: { color: '#666', fontSize: 11 },
-  
-  ratingPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.cardLight, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  ratingText: { color: theme.text, fontSize: 11, fontWeight: 'bold' },
-
-  matchCard: { backgroundColor: theme.card, borderRadius: 16, borderWidth: 1, borderColor: theme.border, padding: 16 },
-  matchLeague: { color: theme.subText, fontSize: 11, textAlign: 'center', marginBottom: 16 },
-  matchScoreRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  matchTeamBlock: { alignItems: 'center', flex: 1 },
-  matchLogo: { width: 48, height: 48, borderRadius: 24, marginBottom: 8, backgroundColor: theme.cardLight },
-  matchTeamName: { color: theme.subText, fontSize: 11, marginBottom: 8 },
-  matchScore: { color: theme.text, fontSize: 20, fontWeight: 'bold' },
-  matchOvers: { color: theme.subText, fontSize: 11, marginTop: 4 },
-  matchVS: { color: theme.subText, fontSize: 12, fontWeight: 'bold', width: 30, textAlign: 'center' },
-  
-  matchFooter: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12, marginTop: 8 },
-  matchVenue: { color: theme.subText, fontSize: 11 },
-});

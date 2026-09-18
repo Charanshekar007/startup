@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { TouchableOpacity, Text } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -8,8 +8,8 @@ export default function SelectionChip({ label, icon, isSelected, onPress, isMult
 
   return (
     <TouchableOpacity 
+      className="flex-row items-center border rounded-lg py-2 px-3 mr-2 mb-2.5"
       style={[
-        styles.chip, 
         { backgroundColor: theme.background, borderColor: theme.inputBorder },
         isSelected && { 
           borderColor: theme.primary, 
@@ -20,39 +20,19 @@ export default function SelectionChip({ label, icon, isSelected, onPress, isMult
       activeOpacity={0.8}
     >
       {isMultiSelect && isSelected && (
-        <MaterialCommunityIcons name="check" size={14} color={theme.primary} style={styles.icon} />
+        <MaterialCommunityIcons name="check" size={14} color={theme.primary} className="mr-1.5" />
       )}
       {!isMultiSelect && icon && (
         <MaterialCommunityIcons 
           name={icon} 
           size={16} 
           color={isSelected ? theme.primary : theme.subText} 
-          style={styles.icon} 
+          className="mr-1.5" 
         />
       )}
-      <Text style={[styles.text, { color: theme.subText }, isSelected && { color: theme.primary }]}>
+      <Text className="text-xs font-medium" style={[{ color: theme.subText }, isSelected && { color: theme.primary }]}>
         {label}
       </Text>
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginRight: 8,
-    marginBottom: 10,
-  },
-  icon: {
-    marginRight: 6,
-  },
-  text: {
-    fontSize: 12,
-    fontWeight: '500',
-  }
-});

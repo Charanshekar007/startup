@@ -1,4 +1,4 @@
-import { Dimensions, StyleSheet, View } from 'react-native';
+import { Dimensions, View } from 'react-native';
 import Svg, { Circle, Defs, Path, Pattern, Rect } from 'react-native-svg';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -10,8 +10,8 @@ export default function BackgroundDecoration() {
   const dotColor = theme.isDark ? '#12251E' : '#E8F2EC';
 
   return (
-    <View style={styles.container} pointerEvents="none">
-      <Svg height={height} width={width} style={StyleSheet.absoluteFill}>
+    <View className="absolute inset-0 -z-10" pointerEvents="none">
+      <Svg height={height} width={width} className="absolute inset-0">
         <Defs>
           <Pattern id="dots" x="0" y="0" width="15" height="15" patternUnits="userSpaceOnUse">
             <Circle cx="2" cy="2" r="1.5" fill={dotColor} />
@@ -42,13 +42,3 @@ export default function BackgroundDecoration() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: -1,
-  },
-});
-
-//making changes here
-console.log("wee");

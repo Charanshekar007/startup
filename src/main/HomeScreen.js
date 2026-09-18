@@ -1,25 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native'; // <-- IMPORT ADDED
+import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
 
 export default function HomeScreen() {
-  const navigation = useNavigation(); // <-- HOOK ADDED
+  const navigation = useNavigation();
   const { activeSport } = useAuthStore();
   const [activeTab, setActiveTab] = useState('FOR_YOU'); // Defaulting to FOR_YOU to match Image 2
-
-  // --- UI COLORS ---
-  const colors = {
-    bg: '#0a0a0a',
-    card: '#161616',
-    primary: '#2ecc71',
-    text: '#ffffff',  
-    subText: '#888888',
-    border: '#222222',
-    accent: '#1e3a29' // Subtle green background for tags
-  };
 
   // --- MOCK DATA: GLOBAL FEED ---
   const feedPosts = [
@@ -57,72 +46,76 @@ export default function HomeScreen() {
   ];
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
+    <SafeAreaView className="flex-1 bg-[#0a0a0a]">
       
       {/* --- 1. CUSTOM TOP HEADER --- */}
-      <View style={styles.header}>
-        <View style={styles.logoContainer}>
-          <Text style={[styles.logoIcon, { color: colors.primary }]}>P</Text>
-          <Text style={[styles.logoText, { color: colors.text }]}>PLAYFIELD</Text>
+      <View className="flex-row items-center justify-between px-4 py-3">
+        <View className="flex-row items-center">
+          <Text className="text-2xl font-black italic mr-1 text-[#2ecc71]">P</Text>
+          <Text className="text-base font-black tracking-[0.5px] text-white">PLAYFIELD</Text>
         </View>
 
-        <TouchableOpacity style={[styles.locationPill, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Feather name="map-pin" size={12} color={colors.primary} />
-          <Text style={[styles.locationText, { color: colors.text }]}>Hyderabad</Text>
-          <Feather name="chevron-down" size={14} color={colors.subText} />
+        <TouchableOpacity className="flex-row items-center border border-[#222222] px-[10px] py-[6px] rounded-2xl bg-[#161616]">
+          <Feather name="map-pin" size={12} color="#2ecc71" />
+          <Text className="text-xs font-semibold mx-[6px] text-white">Hyderabad</Text>
+          <Feather name="chevron-down" size={14} color="#888888" />
         </TouchableOpacity>
 
-        <View style={styles.headerActions}>
+        <View className="flex-row items-center">
           {/* --- NOTIFICATIONS ONPRESS ADDED HERE --- */}
-          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Notifications')}>
-            <Feather name="bell" size={22} color={colors.text} />
-            <View style={[styles.badge, { backgroundColor: colors.primary }]}><Text style={styles.badgeText}>3</Text></View>
+          <TouchableOpacity className="relative mr-4" onPress={() => navigation.navigate('Notifications')}>
+            <Feather name="bell" size={22} color="#ffffff" />
+            <View className="absolute -top-1 -right-[6px] rounded-full w-4 h-4 justify-center items-center bg-[#2ecc71]">
+              <Text className="text-black text-[9px] font-bold">3</Text>
+            </View>
           </TouchableOpacity>
           {/* --- MESSAGES ONPRESS ALREADY HERE --- */}
-          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Messages')}>
-            <Feather name="message-square" size={22} color={colors.text} />
-            <View style={[styles.badge, { backgroundColor: colors.primary }]}><Text style={styles.badgeText}>2</Text></View>
+          <TouchableOpacity className="relative mr-4" onPress={() => navigation.navigate('Messages')}>
+            <Feather name="message-square" size={22} color="#ffffff" />
+            <View className="absolute -top-1 -right-[6px] rounded-full w-4 h-4 justify-center items-center bg-[#2ecc71]">
+              <Text className="text-black text-[9px] font-bold">2</Text>
+            </View>
           </TouchableOpacity>
           <TouchableOpacity>
-            <Image source={{uri: 'https://randomuser.me/api/portraits/men/32.jpg'}} style={styles.avatar} />
+            <Image source={{uri: 'https://randomuser.me/api/portraits/men/32.jpg'}} className="w-8 h-8 rounded-full" />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* --- 2. SEARCH BAR --- */}
-      <View style={styles.searchWrapper}>
-        <View style={[styles.searchContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Feather name="search" size={20} color={colors.subText} style={styles.searchIcon} />
+      <View className="px-4 pb-3">
+        <View className="flex-row items-center border border-[#222222] rounded-full px-4 h-11 bg-[#161616]">
+          <Feather name="search" size={20} color="#888888" className="mr-[10px]" />
           <TextInput 
-            style={[styles.searchInput, { color: colors.text }]}
+            className="flex-1 text-sm text-white"
             placeholder="Search players, teams, matches..."
-            placeholderTextColor={colors.subText}
+            placeholderTextColor="#888888"
           />
           <TouchableOpacity>
-            <Feather name="sliders" size={20} color={colors.text} />
+            <Feather name="sliders" size={20} color="#ffffff" />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* --- 3. CUSTOM TOP TABS (FEED vs FOR YOU) --- */}
-      <View style={[styles.tabContainer, { borderBottomColor: colors.border }]}>
+      <View className="flex-row border-b border-[#222222]">
         <TouchableOpacity 
-          style={[styles.topTab, activeTab === 'FEED' && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
+          className={`flex-1 items-center py-3 ${activeTab === 'FEED' ? 'border-b-2 border-[#2ecc71]' : ''}`}
           onPress={() => setActiveTab('FEED')}
         >
-          <Text style={[styles.topTabText, { color: activeTab === 'FEED' ? colors.primary : colors.subText }]}>FEED</Text>
+          <Text className={`text-[13px] font-bold tracking-widest ${activeTab === 'FEED' ? 'text-[#2ecc71]' : 'text-[#888888]'}`}>FEED</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.topTab, activeTab === 'FOR_YOU' && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
+          className={`flex-1 items-center py-3 ${activeTab === 'FOR_YOU' ? 'border-b-2 border-[#2ecc71]' : ''}`}
           onPress={() => setActiveTab('FOR_YOU')}
         >
-          <Text style={[styles.topTabText, { color: activeTab === 'FOR_YOU' ? colors.primary : colors.subText }]}>FOR YOU</Text>
+          <Text className={`text-[13px] font-bold tracking-widest ${activeTab === 'FOR_YOU' ? 'text-[#2ecc71]' : 'text-[#888888]'}`}>FOR YOU</Text>
         </TouchableOpacity>
       </View>
 
       {/* --- 4. SCROLLABLE CONTENT AREA --- */}
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerClassName="pb-[100px]" showsVerticalScrollIndicator={false}>
         
         {activeTab === 'FEED' ? (
           /* ==========================================
@@ -130,45 +123,45 @@ export default function HomeScreen() {
           ========================================== */
           <View>
             {feedPosts.map((post) => (
-              <View key={post.id} style={styles.postCard}>
-                <View style={styles.postHeader}>
-                  <View style={styles.postAvatar} />
-                  <View style={styles.postMeta}>
-                    <View style={styles.postAuthorRow}>
-                      <Text style={[styles.postName, { color: colors.text }]}>{post.name}</Text>
-                      <Feather name="check-circle" size={14} color={colors.primary} style={{ marginLeft: 4 }} />
+              <View key={post.id} className="pt-4">
+                <View className="flex-row items-center px-4 mb-3">
+                  <View className="w-11 h-11 rounded-full bg-[#333333] mr-3" />
+                  <View className="flex-1">
+                    <View className="flex-row items-center">
+                      <Text className="text-[15px] font-bold text-white">{post.name}</Text>
+                      <Feather name="check-circle" size={14} color="#2ecc71" className="ml-1" />
                     </View>
-                    <Text style={[styles.postSubMeta, { color: colors.subText }]}>
-                      {post.username} • <Text style={{ color: post.sport === 'Cricket' ? colors.primary : '#3498db' }}>{post.sport}</Text>
+                    <Text className="text-xs mt-[2px] text-[#888888]">
+                      {post.username} • <Text className={post.sport === 'Cricket' ? 'text-[#2ecc71]' : 'text-[#3498db]'}>{post.sport}</Text>
                     </Text>
-                    <Text style={[styles.postSubMeta, { color: colors.subText, fontSize: 11 }]}>
+                    <Text className="text-[11px] mt-[2px] text-[#888888]">
                       <Feather name="map-pin" size={10} /> {post.location} • {post.time}
                     </Text>
                   </View>
-                  <TouchableOpacity><Feather name="more-vertical" size={20} color={colors.subText} /></TouchableOpacity>
+                  <TouchableOpacity><Feather name="more-vertical" size={20} color="#888888" /></TouchableOpacity>
                 </View>
 
-                <Image source={{ uri: post.image }} style={styles.postImage} />
-                <Text style={[styles.postCaption, { color: colors.text }]}>{post.caption}</Text>
+                <Image source={{ uri: post.image }} className="w-[92%] h-60 bg-[#222222] rounded-xl self-center" />
+                <Text className="text-sm leading-5 px-4 mt-3 text-white">{post.caption}</Text>
 
-                <View style={styles.postActions}>
-                  <TouchableOpacity style={styles.actionBtn}>
+                <View className="flex-row items-center px-4 mt-4 mb-4">
+                  <TouchableOpacity className="flex-row items-center mr-6">
                     <Feather name="heart" size={20} color="#e74c3c" />
-                    <Text style={[styles.actionText, { color: colors.text }]}>{post.likes}</Text>
+                    <Text className="text-sm font-semibold ml-2 text-white">{post.likes}</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionBtn}>
-                    <Feather name="message-circle" size={20} color={colors.subText} />
-                    <Text style={[styles.actionText, { color: colors.text }]}>{post.comments}</Text>
+                  <TouchableOpacity className="flex-row items-center mr-6">
+                    <Feather name="message-circle" size={20} color="#888888" />
+                    <Text className="text-sm font-semibold ml-2 text-white">{post.comments}</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionBtn}>
-                    <Feather name="share" size={20} color={colors.subText} />
-                    <Text style={[styles.actionText, { color: colors.text }]}>Share</Text>
+                  <TouchableOpacity className="flex-row items-center mr-6">
+                    <Feather name="share" size={20} color="#888888" />
+                    <Text className="text-sm font-semibold ml-2 text-white">Share</Text>
                   </TouchableOpacity>
-                  <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                    <TouchableOpacity><Feather name="bookmark" size={20} color={colors.subText} /></TouchableOpacity>
+                  <View className="flex-1 items-end">
+                    <TouchableOpacity><Feather name="bookmark" size={20} color="#888888" /></TouchableOpacity>
                   </View>
                 </View>
-                <View style={[styles.postDivider, { backgroundColor: colors.border }]} />
+                <View className="h-[1px] w-full bg-[#222222]" />
               </View>
             ))}
           </View>
@@ -176,151 +169,157 @@ export default function HomeScreen() {
           /* ==========================================
              TAB 2: FOR YOU (PERSONALIZED CRICKET)
           ========================================== */
-          <View style={styles.forYouContainer}>
+          <View className="p-4">
             
             {/* For You Header */}
-            <View style={styles.forYouHeader}>
+            <View className="flex-row justify-between items-start mb-5">
               <View>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Ionicons name="sparkles" size={18} color={colors.primary} />
-                  <Text style={[styles.forYouTitle, { color: colors.text }]}> For You • {activeSport || 'Cricket'}</Text>
+                <View className="flex-row items-center">
+                  <Ionicons name="sparkles" size={18} color="#2ecc71" />
+                  <Text className="text-base font-bold ml-1 text-white"> For You • {activeSport || 'Cricket'}</Text>
                 </View>
-                <Text style={[styles.forYouSubtitle, { color: colors.subText }]}>Personalized cricket content for you.</Text>
+                <Text className="text-[13px] mt-1 ml-[22px] text-[#888888]">Personalized cricket content for you.</Text>
               </View>
-              <TouchableOpacity style={[styles.customizeBtn, { borderColor: colors.border }]}>
-                <Feather name="sliders" size={14} color={colors.primary} />
-                <Text style={[styles.customizeText, { color: colors.primary }]}>Customize</Text>
+              <TouchableOpacity className="flex-row items-center border border-[#222222] px-[10px] py-[6px] rounded-lg">
+                <Feather name="sliders" size={14} color="#2ecc71" />
+                <Text className="text-xs font-semibold ml-[6px] text-[#2ecc71]">Customize</Text>
               </TouchableOpacity>
             </View>
 
             {/* --- WIDGET 1: Player to Watch --- */}
-            <View style={styles.widgetHeader}>
-              <Text style={[styles.widgetTitle, { color: colors.primary }]}>Player to Watch</Text>
+            <View className="flex-row justify-between items-center mt-4 mb-2 px-1">
+              <Text className="text-[13px] font-semibold text-[#2ecc71]">Player to Watch</Text>
             </View>
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.playerTopRow}>
-                <Image source={{uri: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80'}} style={styles.playerImage} />
-                <View style={styles.playerInfo}>
-                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                    <Text style={[styles.playerName, { color: colors.text }]}>Shubman Gill </Text>
-                    <Feather name="check-circle" size={14} color={colors.primary} />
+            <View className="border border-[#222222] rounded-xl p-4 mb-2 bg-[#161616]">
+              <View className="flex-row">
+                <Image source={{uri: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80'}} className="w-[70px] h-[90px] rounded-lg mr-4 bg-[#222222]" />
+                <View className="flex-1 justify-center">
+                  <View className="flex-row items-center">
+                    <Text className="text-base font-bold text-white">Shubman Gill </Text>
+                    <Feather name="check-circle" size={14} color="#2ecc71" />
                   </View>
-                  <Text style={[styles.playerSub, { color: colors.subText }]}>Top Order Batter • Team India</Text>
-                  <Text style={[styles.playerDesc, { color: colors.subText }]}>In exceptional form this season.</Text>
+                  <Text className="text-[13px] mt-1 text-[#888888]">Top Order Batter • Team India</Text>
+                  <Text className="text-[13px] mt-2 italic text-[#888888]">In exceptional form this season.</Text>
                 </View>
               </View>
-              <View style={styles.statsRow}>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statLabel, { color: colors.subText }]}>Matches</Text>
-                  <Text style={[styles.statValue, { color: colors.text }]}>12</Text>
+              <View className="flex-row justify-between items-end mt-4">
+                <View className="items-start">
+                  <Text className="text-[11px] mb-1 text-[#888888]">Matches</Text>
+                  <Text className="text-base font-bold text-white">12</Text>
                 </View>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statLabel, { color: colors.subText }]}>Runs</Text>
-                  <Text style={[styles.statValue, { color: colors.primary }]}>842</Text>
+                <View className="items-start">
+                  <Text className="text-[11px] mb-1 text-[#888888]">Runs</Text>
+                  <Text className="text-base font-bold text-[#2ecc71]">842</Text>
                 </View>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statLabel, { color: colors.subText }]}>Avg</Text>
-                  <Text style={[styles.statValue, { color: colors.primary }]}>70.16</Text>
+                <View className="items-start">
+                  <Text className="text-[11px] mb-1 text-[#888888]">Avg</Text>
+                  <Text className="text-base font-bold text-[#2ecc71]">70.16</Text>
                 </View>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statLabel, { color: colors.subText }]}>SR</Text>
-                  <Text style={[styles.statValue, { color: colors.primary }]}>94.3</Text>
+                <View className="items-start">
+                  <Text className="text-[11px] mb-1 text-[#888888]">SR</Text>
+                  <Text className="text-base font-bold text-[#2ecc71]">94.3</Text>
                 </View>
-                <TouchableOpacity style={[styles.outlineBtn, { borderColor: colors.primary }]}>
-                  <Text style={[styles.outlineBtnText, { color: colors.primary }]}>View Profile</Text>
+                <TouchableOpacity className="border border-[#2ecc71] rounded-lg px-3 py-[6px]">
+                  <Text className="text-xs font-bold text-[#2ecc71]">View Profile</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             {/* --- WIDGET 2: Recent Performance --- */}
-            <View style={styles.widgetHeader}>
-              <Text style={[styles.widgetTitle, { color: colors.primary }]}>Recent Performance</Text>
-              <Text style={[styles.viewAllText, { color: colors.subText }]}>View all</Text>
+            <View className="flex-row justify-between items-center mt-4 mb-2 px-1">
+              <Text className="text-[13px] font-semibold text-[#2ecc71]">Recent Performance</Text>
+              <Text className="text-xs text-[#888888]">View all</Text>
             </View>
-            <View style={[styles.card, styles.rowCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Image source={{uri: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80'}} style={styles.perfImage} />
-              <View style={styles.perfInfo}>
-                <Text style={[styles.playerName, { color: colors.text }]}>Shubman Gill</Text>
-                <Text style={[styles.perfScore, { color: colors.primary }]}>112 (98)</Text>
-                <Text style={[styles.playerSub, { color: colors.subText }]}>vs Australia</Text>
-                <Text style={[styles.playerSub, { color: colors.subText, fontSize: 11 }]}>ODI Series • 2d ago</Text>
+            <View className="border border-[#222222] rounded-xl p-4 mb-2 bg-[#161616] flex-row items-center">
+              <Image source={{uri: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80'}} className="w-[60px] h-[60px] rounded-lg mr-4" />
+              <View className="flex-1">
+                <Text className="text-base font-bold text-white">Shubman Gill</Text>
+                <Text className="text-base font-bold my-[2px] text-[#2ecc71]">112 (98)</Text>
+                <Text className="text-[13px] mt-1 text-[#888888]">vs Australia</Text>
+                <Text className="text-[11px] mt-1 text-[#888888]">ODI Series • 2d ago</Text>
               </View>
-              <View style={styles.perfResult}>
-                <Text style={[styles.resultText, { color: colors.primary }]}>Team India won</Text>
-                <Text style={[styles.resultSub, { color: colors.subText }]}>by 36 runs</Text>
-                <View style={[styles.tagPill, { backgroundColor: colors.accent }]}>
-                  <Text style={[styles.tagText, { color: colors.primary }]}>Player of the Match</Text>
+              <View className="items-end">
+                <Text className="text-xs font-semibold text-[#2ecc71]">Team India won</Text>
+                <Text className="text-[11px] mt-[2px] text-[#888888]">by 36 runs</Text>
+                <View className="px-2 py-1 rounded mt-2 bg-[#1e3a29]">
+                  <Text className="text-[10px] font-bold text-[#2ecc71]">Player of the Match</Text>
                 </View>
               </View>
             </View>
 
             {/* --- WIDGET 3: Upcoming Match --- */}
-            <View style={styles.widgetHeader}>
-              <Text style={[styles.widgetTitle, { color: colors.primary }]}>Upcoming Match</Text>
-              <Text style={[styles.viewAllText, { color: colors.subText }]}>View all</Text>
+            <View className="flex-row justify-between items-center mt-4 mb-2 px-1">
+              <Text className="text-[13px] font-semibold text-[#2ecc71]">Upcoming Match</Text>
+              <Text className="text-xs text-[#888888]">View all</Text>
             </View>
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.matchTop}>
-                <Text style={[styles.matchSeries, { color: colors.subText }]}>ODI Series • 1st ODI</Text>
+            <View className="border border-[#222222] rounded-xl p-4 mb-2 bg-[#161616]">
+              <View className="items-center mb-4">
+                <Text className="text-xs text-[#888888]">ODI Series • 1st ODI</Text>
               </View>
-              <View style={styles.matchTeamsRow}>
-                <View style={styles.teamSide}>
-                  <View style={styles.mockLogoTeamA}><MaterialCommunityIcons name="cricket" size={24} color="#fff"/></View>
-                  <Text style={[styles.teamName, { color: colors.text }]}>India</Text>
-                  <Text style={[styles.teamSub, { color: colors.subText }]}>Men</Text>
+              <View className="flex-row justify-between items-center">
+                <View className="items-center w-[30%]">
+                  <View className="w-10 h-10 rounded-full bg-[#3498db] justify-center items-center mb-2">
+                    <MaterialCommunityIcons name="cricket" size={24} color="#fff"/>
+                  </View>
+                  <Text className="text-sm font-bold text-white">India</Text>
+                  <Text className="text-[11px] mt-[2px] text-[#888888]">Men</Text>
                 </View>
-                <View style={styles.matchCenter}>
-                  <Text style={[styles.vsText, { color: colors.text }]}>VS</Text>
-                  <Text style={[styles.matchTime, { color: colors.subText }]}>Tomorrow • 2:00 PM</Text>
-                  <Text style={[styles.matchTime, { color: colors.subText }]}>Hyderabad</Text>
+                <View className="items-center">
+                  <Text className="text-base font-bold mb-1 text-white">VS</Text>
+                  <Text className="text-[11px] mt-[2px] text-[#888888]">Tomorrow • 2:00 PM</Text>
+                  <Text className="text-[11px] mt-[2px] text-[#888888]">Hyderabad</Text>
                 </View>
-                <View style={styles.teamSide}>
-                  <Text style={[styles.teamName, { color: colors.text }]}>England</Text>
-                  <Text style={[styles.teamSub, { color: colors.subText }]}>Men</Text>
-                  <View style={styles.mockLogoTeamB}><MaterialCommunityIcons name="shield-star-outline" size={24} color="#fff"/></View>
+                <View className="items-center w-[30%]">
+                  <Text className="text-sm font-bold text-white">England</Text>
+                  <Text className="text-[11px] mt-[2px] text-[#888888]">Men</Text>
+                  <View className="w-10 h-10 rounded-full bg-[#e74c3c] justify-center items-center mb-2">
+                    <MaterialCommunityIcons name="shield-star-outline" size={24} color="#fff"/>
+                  </View>
                 </View>
               </View>
             </View>
 
             {/* --- WIDGET 4: Recommended Team --- */}
-            <View style={styles.widgetHeader}>
-              <Text style={[styles.widgetTitle, { color: colors.primary }]}>Recommended Team</Text>
-              <Text style={[styles.viewAllText, { color: colors.subText }]}>View all</Text>
+            <View className="flex-row justify-between items-center mt-4 mb-2 px-1">
+              <Text className="text-[13px] font-semibold text-[#2ecc71]">Recommended Team</Text>
+              <Text className="text-xs text-[#888888]">View all</Text>
             </View>
-            <View style={[styles.card, styles.teamRowCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.srhLogo}><Text style={{color: '#fff', fontWeight: 'bold'}}>SRH</Text></View>
-              <View style={styles.teamInfo}>
-                <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                  <Text style={[styles.playerName, { color: colors.text }]}>Sunrisers Hyderabad </Text>
-                  <Feather name="check-circle" size={14} color={colors.primary} />
-                </View>
-                <Text style={[styles.playerSub, { color: colors.subText }]}>T20 Franchise</Text>
-                <Text style={[styles.playerSub, { color: colors.subText, fontSize: 12, marginTop: 2 }]}>Strong squad for this season.</Text>
+            <View className="border border-[#222222] rounded-xl p-4 mb-2 bg-[#161616] flex-row items-center">
+              <View className="w-[50px] h-[50px] rounded-full bg-[#d35400] justify-center items-center mr-4">
+                <Text className="text-white font-bold">SRH</Text>
               </View>
-              <View style={styles.followAction}>
-                <TouchableOpacity style={[styles.outlineBtn, { borderColor: colors.primary }]}>
-                  <Text style={[styles.outlineBtnText, { color: colors.primary }]}>Follow</Text>
+              <View className="flex-1">
+                <View className="flex-row items-center">
+                  <Text className="text-base font-bold text-white">Sunrisers Hyderabad </Text>
+                  <Feather name="check-circle" size={14} color="#2ecc71" />
+                </View>
+                <Text className="text-[13px] mt-1 text-[#888888]">T20 Franchise</Text>
+                <Text className="text-xs mt-[2px] text-[#888888]">Strong squad for this season.</Text>
+              </View>
+              <View className="items-end">
+                <TouchableOpacity className="border border-[#2ecc71] rounded-lg px-3 py-[6px]">
+                  <Text className="text-xs font-bold text-[#2ecc71]">Follow</Text>
                 </TouchableOpacity>
-                <Text style={[styles.followersText, { color: colors.subText }]}>28K Followers</Text>
+                <Text className="text-[10px] mt-[6px] text-[#888888]">28K Followers</Text>
               </View>
             </View>
 
             {/* --- WIDGET 5: Trending in Cricket --- */}
-            <View style={styles.widgetHeader}>
-              <Text style={[styles.widgetTitle, { color: colors.primary }]}>Trending in Cricket</Text>
-              <Text style={[styles.viewAllText, { color: colors.subText }]}>View all</Text>
+            <View className="flex-row justify-between items-center mt-4 mb-2 px-1">
+              <Text className="text-[13px] font-semibold text-[#2ecc71]">Trending in Cricket</Text>
+              <Text className="text-xs text-[#888888]">View all</Text>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.trendingScroll}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="overflow-visible">
               {trendingVideos.map((video) => (
-                <View key={video.id} style={styles.trendingCard}>
-                  <View style={styles.trendingImageContainer}>
-                    <Image source={{uri: video.image}} style={styles.trendingImage} />
-                    <View style={styles.playIconOverlay}>
-                      <Feather name="play" size={16} color={colors.primary} />
+                <View key={video.id} className="w-[220px] mr-4">
+                  <View className="relative">
+                    <Image source={{uri: video.image}} className="w-[220px] h-[130px] rounded-xl bg-[#222222]" />
+                    <View className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/60 justify-center items-center border border-[#2ecc71]">
+                      <Feather name="play" size={16} color="#2ecc71" />
                     </View>
                   </View>
-                  <Text style={[styles.trendingTitle, { color: colors.text }]} numberOfLines={2}>{video.title}</Text>
-                  <Text style={[styles.trendingMeta, { color: colors.subText }]}>{video.time} • {video.views}</Text>
+                  <Text className="text-[13px] font-semibold mt-2 leading-[18px] text-white" numberOfLines={2}>{video.title}</Text>
+                  <Text className="text-[11px] mt-1 text-[#888888]">{video.time} • {video.views}</Text>
                 </View>
               ))}
             </ScrollView>
@@ -331,113 +330,3 @@ export default function HomeScreen() {
     </SafeAreaView>
   );
 }
-
-// --- STYLES ---
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
-  logoContainer: { flexDirection: 'row', alignItems: 'center' },
-  logoIcon: { fontSize: 24, fontWeight: '900', fontStyle: 'italic', marginRight: 4 },
-  logoText: { fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
-  locationPill: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 },
-  locationText: { fontSize: 12, fontWeight: '600', marginHorizontal: 6 },
-  headerActions: { flexDirection: 'row', alignItems: 'center' },
-  iconBtn: { position: 'relative', marginRight: 16 },
-  badge: { position: 'absolute', top: -4, right: -6, borderRadius: 10, width: 16, height: 16, justifyContent: 'center', alignItems: 'center' },
-  badgeText: { color: '#000', fontSize: 9, fontWeight: 'bold' },
-  avatar: { width: 32, height: 32, borderRadius: 16 },
-  
-  searchWrapper: { paddingHorizontal: 16, paddingBottom: 12 },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 24, paddingHorizontal: 16, height: 44 },
-  searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, fontSize: 14 },
-
-  tabContainer: { flexDirection: 'row', borderBottomWidth: 1 },
-  topTab: { flex: 1, alignItems: 'center', paddingVertical: 12 },
-  topTabText: { fontSize: 13, fontWeight: 'bold', letterSpacing: 1 },
-
-  scrollContent: { paddingBottom: 100 },
-  
-  /* Global Feed Styles */
-  postCard: { paddingTop: 16 },
-  postHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 12 },
-  postAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#333', marginRight: 12 },
-  postMeta: { flex: 1 },
-  postAuthorRow: { flexDirection: 'row', alignItems: 'center' },
-  postName: { fontSize: 15, fontWeight: '700' },
-  postSubMeta: { fontSize: 12, marginTop: 2 },
-  postImage: { width: '100%', height: 240, backgroundColor: '#222', borderRadius: 12, alignSelf: 'center', width: '92%' },
-  postCaption: { fontSize: 14, lineHeight: 20, paddingHorizontal: 16, marginTop: 12 },
-  postActions: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginTop: 16, marginBottom: 16 },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', marginRight: 24 },
-  actionText: { fontSize: 14, fontWeight: '600', marginLeft: 8 },
-  postDivider: { height: 1, width: '100%' },
-
-  /* For You Tab Styles */
-  forYouContainer: { padding: 16 },
-  forYouHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  forYouTitle: { fontSize: 16, fontWeight: 'bold', marginLeft: 4 },
-  forYouSubtitle: { fontSize: 13, marginTop: 4, marginLeft: 22 },
-  customizeBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-  customizeText: { fontSize: 12, fontWeight: '600', marginLeft: 6 },
-  
-  widgetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, marginBottom: 8, paddingHorizontal: 4 },
-  widgetTitle: { fontSize: 13, fontWeight: '600' },
-  viewAllText: { fontSize: 12 },
-  
-  card: { borderWidth: 1, borderRadius: 12, padding: 16, marginBottom: 8 },
-  
-  /* Player to Watch Card */
-  playerTopRow: { flexDirection: 'row' },
-  playerImage: { width: 70, height: 90, borderRadius: 8, marginRight: 16, backgroundColor: '#222' },
-  playerInfo: { flex: 1, justifyContent: 'center' },
-  playerName: { fontSize: 16, fontWeight: 'bold' },
-  playerSub: { fontSize: 13, marginTop: 4 },
-  playerDesc: { fontSize: 13, marginTop: 8, fontStyle: 'italic' },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 16 },
-  statBox: { alignItems: 'flex-start' },
-  statLabel: { fontSize: 11, marginBottom: 4 },
-  statValue: { fontSize: 16, fontWeight: 'bold' },
-  outlineBtn: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
-  outlineBtnText: { fontSize: 12, fontWeight: 'bold' },
-
-  /* Recent Performance Card */
-  rowCard: { flexDirection: 'row', alignItems: 'center' },
-  perfImage: { width: 60, height: 60, borderRadius: 8, marginRight: 16 },
-  perfInfo: { flex: 1 },
-  perfScore: { fontSize: 16, fontWeight: 'bold', marginTop: 2, marginBottom: 2 },
-  perfResult: { alignItems: 'flex-end' },
-  resultText: { fontSize: 12, fontWeight: '600' },
-  resultSub: { fontSize: 11, marginTop: 2 },
-  tagPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginTop: 8 },
-  tagText: { fontSize: 10, fontWeight: 'bold' },
-
-  /* Upcoming Match Card */
-  matchTop: { alignItems: 'center', marginBottom: 16 },
-  matchSeries: { fontSize: 12 },
-  matchTeamsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  teamSide: { alignItems: 'center', width: '30%' },
-  mockLogoTeamA: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#3498db', justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-  mockLogoTeamB: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#e74c3c', justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-  teamName: { fontSize: 14, fontWeight: 'bold' },
-  teamSub: { fontSize: 11, marginTop: 2 },
-  matchCenter: { alignItems: 'center' },
-  vsText: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
-  matchTime: { fontSize: 11, marginTop: 2 },
-
-  /* Recommended Team Card */
-  teamRowCard: { flexDirection: 'row', alignItems: 'center' },
-  srhLogo: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#d35400', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-  teamInfo: { flex: 1 },
-  followAction: { alignItems: 'flex-end' },
-  followersText: { fontSize: 10, marginTop: 6 },
-
-  /* Trending Scroll */
-  trendingScroll: { overflow: 'visible' },
-  trendingCard: { width: 220, marginRight: 16 },
-  trendingImageContainer: { position: 'relative' },
-  trendingImage: { width: 220, height: 130, borderRadius: 12, backgroundColor: '#222' },
-  playIconOverlay: { position: 'absolute', top: 8, left: 8, width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#2ecc71' },
-  trendingTitle: { fontSize: 13, fontWeight: '600', marginTop: 8, lineHeight: 18 },
-  trendingMeta: { fontSize: 11, marginTop: 4 }
-});

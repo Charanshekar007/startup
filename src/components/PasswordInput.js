@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -8,52 +8,26 @@ export default function PasswordInput({ label, placeholder, ...props }) {
   const [isSecure, setIsSecure] = useState(true);
 
   return (
-    <View style={styles.container}>
-      <Text style={[styles.label, { color: theme.text }]}>{label}</Text>
-      <View style={[styles.inputContainer, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
-        <Feather name="lock" size={20} color={theme.iconColor} style={styles.icon} />
+    <View className="mb-3">
+      <Text className="text-sm font-semibold mb-2" style={{ color: theme.text }}>{label}</Text>
+      <View
+        className="flex-row items-center border rounded-xl h-14 px-4"
+        style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}
+      >
+        <Feather name="lock" size={20} color={theme.iconColor} className="mr-3" />
         <TextInput
-          style={[styles.input, { color: theme.text }]}
+          className="flex-1 text-base h-full"
+          style={{ color: theme.text }}
           placeholder={placeholder}
           placeholderTextColor={theme.subText}
           secureTextEntry={isSecure}
           autoCapitalize="none"
           {...props}
         />
-        <TouchableOpacity onPress={() => setIsSecure(!isSecure)} style={styles.eyeIcon}>
+        <TouchableOpacity onPress={() => setIsSecure(!isSecure)} className="p-1">
           <Feather name={isSecure ? 'eye' : 'eye-off'} size={20} color={theme.subText} />
         </TouchableOpacity>
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 12,
-    height: 56,
-    paddingHorizontal: 16,
-  },
-  icon: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    height: '100%',
-  },
-  eyeIcon: {
-    padding: 4,
-  },
-});

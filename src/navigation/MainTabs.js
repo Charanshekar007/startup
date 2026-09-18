@@ -47,15 +47,10 @@ export default function MainTabs() {
           // Special Custom Button for 'Create' (The central +)
           if (route.name === 'Create') {
             return (
-              <View style={{
-                width: 48,
-                height: 48,
-                backgroundColor: theme.primary || '#2ecc71',
-                borderRadius: 24,
-                justifyContent: 'center',
-                alignItems: 'center',
-                marginBottom: 4, 
-              }}>
+              <View 
+                className="w-12 h-12 rounded-full justify-center items-center mb-1"
+                style={{ backgroundColor: theme.primary || '#2ecc71' }}
+              >
                 <Feather name="plus" size={24} color="#000" />
               </View>
             );

@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { View, TextInput, StyleSheet } from 'react-native';
+import { View, TextInput } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 
 export default function OTPInput({ onOtpChange }) {
@@ -38,19 +38,17 @@ export default function OTPInput({ onOtpChange }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View className="flex-row justify-between w-full mb-8">
       {otp.map((digit, index) => (
         <TextInput
           key={index}
-          style={[
-            styles.input,
-            { 
-              backgroundColor: theme.background, 
-              // Highlight the border green if filled, otherwise normal border
-              borderColor: digit ? theme.primary : theme.inputBorder,
-              color: theme.text 
-            }
-          ]}
+          className="w-[45px] h-[55px] border rounded-[10px] text-xl font-bold text-center"
+          style={{ 
+            backgroundColor: theme.background, 
+            // Highlight the border green if filled, otherwise normal border
+            borderColor: digit ? theme.primary : theme.inputBorder,
+            color: theme.text 
+          }}
           value={digit}
           onChangeText={(text) => handleChange(text, index)}
           onKeyPress={(e) => handleKeyPress(e, index)}
@@ -62,21 +60,3 @@ export default function OTPInput({ onOtpChange }) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 32,
-  },
-  input: {
-    width: 45,
-    height: 55,
-    borderWidth: 1,
-    borderRadius: 10,
-    fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-});

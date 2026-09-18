@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
@@ -51,33 +51,33 @@ export default function CricketProfileScreen() {
   ];
 
   const SectionHeader = ({ num, title }) => (
-    <View style={styles.sectionHeader}>
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>{num}. {title}</Text>
+    <View className="flex-row items-center mb-4">
+      <Text className="text-sm font-semibold mr-[6px]" style={{ color: theme.text }}>{num}. {title}</Text>
       <Feather name="info" size={14} color={theme.subText} />
     </View>
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: theme.background }}>
       
       {/* Header */}
-      <View style={styles.header}>
+      <View className="px-6 pt-2 mb-4">
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={24} color={theme.text} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerClassName="px-6 pb-8" showsVerticalScrollIndicator={false}>
         
         {/* Title Area */}
-        <View style={styles.titleArea}>
-          <View style={styles.titleContent}>
-            <Text style={[styles.badge, { color: theme.primary }]}>Profile Setup</Text>
-            <Text style={[styles.title, { color: theme.text }]}>Cricket Profile</Text>
-            <Text style={[styles.subtitle, { color: theme.subText }]}>Tell us about your cricket experience</Text>
+        <View className="flex-row justify-between mb-6">
+          <View className="flex-1">
+            <Text className="text-xs font-semibold mb-1" style={{ color: theme.primary }}>Profile Setup</Text>
+            <Text className="text-[26px] font-bold mb-1" style={{ color: theme.text }}>Cricket Profile</Text>
+            <Text className="text-[13px]" style={{ color: theme.subText }}>Tell us about your cricket experience</Text>
           </View>
-          <View style={styles.visualPlaceholder}>
-             <Ionicons name="baseball" size={60} color={theme.primary} style={{ opacity: 0.5 }} />
+          <View className="w-20 h-20 justify-center items-center">
+             <Ionicons name="baseball" size={60} color={theme.primary} className="opacity-50" />
           </View>
         </View>
 
@@ -85,9 +85,9 @@ export default function CricketProfileScreen() {
         <StepProgress steps={steps} currentStep={3} />
 
         {/* 1. Playing Role */}
-        <View style={[styles.section, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
+        <View className="mb-6 p-4 rounded-xl border" style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}>
           <SectionHeader num="1" title="Playing Role" />
-          <View style={styles.chipRow}>
+          <View className="flex-row flex-wrap">
             <SelectionChip label="Batter" icon="bat" isSelected={role === 'Batter'} onPress={() => setRole('Batter')} />
             <SelectionChip label="Bowler" icon="baseball" isSelected={role === 'Bowler'} onPress={() => setRole('Bowler')} />
             <SelectionChip label="All Rounder" icon="star" isSelected={role === 'All Rounder'} onPress={() => setRole('All Rounder')} />
@@ -96,9 +96,9 @@ export default function CricketProfileScreen() {
         </View>
 
         {/* 2. Batting Style */}
-        <View style={[styles.section, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
+        <View className="mb-6 p-4 rounded-xl border" style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}>
           <SectionHeader num="2" title="Batting Style" />
-          <View style={styles.chipRow}>
+          <View className="flex-row flex-wrap">
             <SelectionChip label="Right Hand" icon="pencil" isSelected={batting === 'Right Hand'} onPress={() => setBatting('Right Hand')} />
             <SelectionChip label="Left Hand" icon="pencil-off" isSelected={batting === 'Left Hand'} onPress={() => setBatting('Left Hand')} />
             <SelectionChip label="Switch Hitter" icon="swap-horizontal" isSelected={batting === 'Switch Hitter'} onPress={() => setBatting('Switch Hitter')} />
@@ -106,9 +106,9 @@ export default function CricketProfileScreen() {
         </View>
 
         {/* 3. Bowling Style */}
-        <View style={[styles.section, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
+        <View className="mb-6 p-4 rounded-xl border" style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}>
           <SectionHeader num="3" title="Bowling Style" />
-          <View style={styles.chipRow}>
+          <View className="flex-row flex-wrap">
             <SelectionChip label="Right Arm Fast" icon="run" isSelected={bowling === 'Right Arm Fast'} onPress={() => setBowling('Right Arm Fast')} />
             <SelectionChip label="Left Arm Fast" icon="run" isSelected={bowling === 'Left Arm Fast'} onPress={() => setBowling('Left Arm Fast')} />
             <SelectionChip label="Right Arm Spin" icon="rotate-right" isSelected={bowling === 'Right Arm Spin'} onPress={() => setBowling('Right Arm Spin')} />
@@ -119,19 +119,17 @@ export default function CricketProfileScreen() {
         </View>
 
         {/* 4. Experience Level */}
-        <View style={[styles.section, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
+        <View className="mb-6 p-4 rounded-xl border" style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}>
           <SectionHeader num="4" title="Experience Level" />
-          <View style={[styles.segmentedControl, { backgroundColor: theme.background, borderColor: theme.inputBorder }]}>
+          <View className="rounded-md border p-[2px] flex-row" style={{ backgroundColor: theme.background, borderColor: theme.inputBorder }}>
             {['Beginner', 'Intermediate', 'Advanced', 'Professional'].map((level) => (
               <TouchableOpacity 
                 key={level} 
-                style={[
-                  styles.segmentBtn, 
-                  experience === level && { backgroundColor: theme.isDark ? 'rgba(50, 215, 75, 0.1)' : 'rgba(50, 215, 75, 0.15)', borderColor: theme.primary, borderWidth: 1 }
-                ]}
+                className="flex-1 py-2 items-center rounded"
+                style={experience === level ? { backgroundColor: theme.isDark ? 'rgba(50, 215, 75, 0.1)' : 'rgba(50, 215, 75, 0.15)', borderColor: theme.primary, borderWidth: 1 } : undefined}
                 onPress={() => setExperience(level)}
               >
-                <Text style={[styles.segmentText, { color: theme.subText }, experience === level && { color: theme.primary }]}>
+                <Text className="text-[11px] font-medium" style={[{ color: theme.subText }, experience === level && { color: theme.primary }]}>
                   {level}
                 </Text>
               </TouchableOpacity>
@@ -140,7 +138,7 @@ export default function CricketProfileScreen() {
         </View>
 
         {/* 5. Teams */}
-        <View style={[styles.section, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
+        <View className="mb-6 p-4 rounded-xl border" style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}>
           <SectionHeader num="5" title="Teams You Are Part Of" />
           
           {teams.map((team, index) => (
@@ -148,25 +146,26 @@ export default function CricketProfileScreen() {
           ))}
 
           {isSearchingTeam ? (
-            <View style={styles.searchContainer}>
+            <View className="flex-row items-center mt-2">
               <TextInput
-                style={[styles.searchInput, { backgroundColor: theme.background, borderColor: theme.inputBorder, color: theme.text }]}
+                className="flex-1 h-11 border rounded-lg px-3 mr-2"
+                style={{ backgroundColor: theme.background, borderColor: theme.inputBorder, color: theme.text }}
                 placeholder="Search team name..."
                 placeholderTextColor={theme.subText}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoFocus={true}
               />
-              <TouchableOpacity onPress={handleAddTeam} style={styles.addBtn}>
+              <TouchableOpacity onPress={handleAddTeam} className="py-[10px] px-3">
                 <Text style={{ color: theme.primary, fontWeight: 'bold' }}>Add</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setIsSearchingTeam(false)} style={styles.cancelBtn}>
+              <TouchableOpacity onPress={() => setIsSearchingTeam(false)} className="py-[10px] px-2">
                 <Text style={{ color: theme.subText }}>Cancel</Text>
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity style={styles.addTeamBtn} onPress={() => setIsSearchingTeam(true)}>
-              <Text style={[styles.addTeamText, { color: theme.primary }]}>
+            <TouchableOpacity className="items-center py-3" onPress={() => setIsSearchingTeam(true)}>
+              <Text className="text-[13px] font-semibold" style={{ color: theme.primary }}>
                 + {teams.length > 0 ? 'Add Another Team' : 'Add Team'}
               </Text>
             </TouchableOpacity>
@@ -174,12 +173,12 @@ export default function CricketProfileScreen() {
         </View>
 
         {/* 6. Cricket Interests */}
-        <View style={[styles.section, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>6. Cricket Interests <Text style={{ color: theme.subText, fontWeight: '400', fontSize: 12 }}>(Select all that apply)</Text></Text>
+        <View className="mb-6 p-4 rounded-xl border" style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}>
+          <View className="flex-row items-center mb-4">
+            <Text className="text-sm font-semibold mr-[6px]" style={{ color: theme.text }}>6. Cricket Interests <Text className="font-normal text-xs" style={{ color: theme.subText }}>(Select all that apply)</Text></Text>
             <Feather name="info" size={14} color={theme.subText} />
           </View>
-          <View style={styles.chipRow}>
+          <View className="flex-row flex-wrap">
             {['Matches', 'Tournaments', 'Stats & Analytics', 'Player Rankings', 'Coaching', 'Fantasy'].map((interest) => (
               <SelectionChip 
                 key={interest} 
@@ -193,7 +192,7 @@ export default function CricketProfileScreen() {
         </View>
 
         {/* Footer Actions */}
-        <View style={styles.footer}>
+        <View className="mt-4 items-center">
           
           {/* UPDATED BUTTON HERE - NOW MATCHES YOUR ARCHITECTURE */}
           <PrimaryButton 
@@ -222,8 +221,8 @@ export default function CricketProfileScreen() {
             }} 
           />
           
-          <TouchableOpacity style={styles.skipBtn}>
-            <Text style={[styles.skipText, { color: theme.subText }]}>Skip for now</Text>
+          <TouchableOpacity className="mt-4 p-2">
+            <Text className="text-[13px]" style={{ color: theme.subText }}>Skip for now</Text>
           </TouchableOpacity>
         </View>
 
@@ -231,31 +230,3 @@ export default function CricketProfileScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { paddingHorizontal: 24, paddingTop: 8, marginBottom: 16 },
-  scrollContent: { paddingHorizontal: 24, paddingBottom: 32 },
-  titleArea: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 },
-  titleContent: { flex: 1 },
-  badge: { fontSize: 12, fontWeight: '600', marginBottom: 4 },
-  title: { fontSize: 26, fontWeight: 'bold', marginBottom: 4 },
-  subtitle: { fontSize: 13 },
-  visualPlaceholder: { width: 80, height: 80, justifyContent: 'center', alignItems: 'center' },
-  section: { marginBottom: 24, padding: 16, borderRadius: 12, borderWidth: 1 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', marginRight: 6 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap' },
-  segmentedControl: { borderRadius: 6, borderWidth: 1, padding: 2, flexDirection: 'row' },
-  segmentBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 4 },
-  segmentText: { fontSize: 11, fontWeight: '500' },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  searchInput: { flex: 1, height: 44, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, marginRight: 8 },
-  addBtn: { paddingVertical: 10, paddingHorizontal: 12 },
-  cancelBtn: { paddingVertical: 10, paddingHorizontal: 8 },
-  addTeamBtn: { alignItems: 'center', paddingVertical: 12 },
-  addTeamText: { fontSize: 13, fontWeight: '600' },
-  footer: { marginTop: 16, alignItems: 'center' },
-  skipBtn: { marginTop: 16, padding: 8 },
-  skipText: { fontSize: 13 }
-});

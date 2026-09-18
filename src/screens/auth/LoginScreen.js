@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
@@ -69,25 +69,26 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={styles.content}>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: theme.background }}>
+      <View className="flex-1 p-6 justify-center">
         
         {/* Header */}
-        <View style={styles.header}>
-          <View style={[styles.logoPlaceholder, { borderColor: theme.primary }]}>
-            <Text style={{ color: theme.primary, fontSize: 12, textAlign: 'center' }}>APP{'\n'}LOGO</Text>
+        <View className="items-center mb-10">
+          <View className="w-16 h-16 rounded-full border justify-center items-center mb-6" style={{ borderColor: theme.primary }}>
+            <Text className="text-xs text-center" style={{ color: theme.primary }}>APP{'\n'}LOGO</Text>
           </View>
-          <Text style={[styles.title, { color: theme.text }]}>Welcome Back</Text>
-          <Text style={[styles.subtitle, { color: theme.subText }]}>Start your sports journey</Text>
+          <Text className="text-[28px] font-bold mb-2" style={{ color: theme.text }}>Welcome Back</Text>
+          <Text className="text-sm" style={{ color: theme.subText }}>Start your sports journey</Text>
         </View>
 
         {/* Input Form */}
-        <View style={styles.form}>
-          <Text style={[styles.inputLabel, { color: theme.text }]}>Email or Username</Text>
-          <View style={[styles.inputContainer, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
-            <Feather name="user" size={20} color={theme.subText} style={styles.inputIcon} />
+        <View className="mb-8">
+          <Text className="text-sm font-semibold mb-2 mt-4" style={{ color: theme.text }}>Email or Username</Text>
+          <View className="flex-row items-center border rounded-xl px-4 h-14" style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}>
+            <Feather name="user" size={20} color={theme.subText} className="mr-3" />
             <TextInput
-              style={[styles.input, { color: theme.text }]}
+              className="flex-1 text-base"
+              style={{ color: theme.text }}
               placeholder="Enter your email or username"
               placeholderTextColor={theme.subText}
               value={email}
@@ -96,11 +97,12 @@ export default function LoginScreen() {
             />
           </View>
 
-          <Text style={[styles.inputLabel, { color: theme.text }]}>Password</Text>
-          <View style={[styles.inputContainer, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
-            <Feather name="lock" size={20} color={theme.subText} style={styles.inputIcon} />
+          <Text className="text-sm font-semibold mb-2 mt-4" style={{ color: theme.text }}>Password</Text>
+          <View className="flex-row items-center border rounded-xl px-4 h-14" style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}>
+            <Feather name="lock" size={20} color={theme.subText} className="mr-3" />
             <TextInput
-              style={[styles.input, { color: theme.text }]}
+              className="flex-1 text-base"
+              style={{ color: theme.text }}
               placeholder="Enter your password"
               placeholderTextColor={theme.subText}
               secureTextEntry={!showPassword}
@@ -112,62 +114,42 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.forgotPassword}>
-            <Text style={[styles.forgotPasswordText, { color: theme.text }]}>Forgot Password?</Text>
+          <TouchableOpacity className="self-end mt-3 mb-6">
+            <Text className="text-sm" style={{ color: theme.text }}>Forgot Password?</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={[styles.signInBtn, { backgroundColor: theme.primary }]}
+            className="h-14 rounded-xl justify-center items-center"
+            style={{ backgroundColor: theme.primary }}
             onPress={handleSignIn}
           >
-            <Text style={styles.signInBtnText}>Sign In</Text>
+            <Text className="text-black text-base font-bold">Sign In</Text>
           </TouchableOpacity>
         </View>
 
         {/* Divider & Google Login */}
-        <View style={styles.dividerContainer}>
-          <View style={[styles.divider, { backgroundColor: theme.inputBorder }]} />
-          <Text style={[styles.dividerText, { color: theme.subText }]}>or continue with</Text>
-          <View style={[styles.divider, { backgroundColor: theme.inputBorder }]} />
+        <View className="flex-row items-center mb-8">
+          <View className="flex-1 h-[1px]" style={{ backgroundColor: theme.inputBorder }} />
+          <Text className="px-4 text-sm" style={{ color: theme.subText }}>or continue with</Text>
+          <View className="flex-1 h-[1px]" style={{ backgroundColor: theme.inputBorder }} />
         </View>
 
-        <TouchableOpacity style={[styles.googleBtn, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
-          <Text style={{ color: theme.text, fontSize: 18, fontWeight: 'bold', marginRight: 12 }}>G</Text>
-          <Text style={[styles.googleBtnText, { color: theme.text }]}>Continue with Google</Text>
+        <TouchableOpacity
+          className="h-14 flex-row rounded-xl border justify-center items-center mb-8"
+          style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}
+        >
+          <Text className="text-lg font-bold mr-3" style={{ color: theme.text }}>G</Text>
+          <Text className="text-base font-semibold" style={{ color: theme.text }}>Continue with Google</Text>
         </TouchableOpacity>
 
         {/* Footer */}
-        <View style={styles.footer}>
+        <View className="flex-row justify-center">
           <Text style={{ color: theme.subText }}>Don't have an account? </Text>
           <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
-            <Text style={{ color: theme.primary, fontWeight: 'bold' }}>Sign Up</Text>
+            <Text className="font-bold" style={{ color: theme.primary }}>Sign Up</Text>
           </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { flex: 1, padding: 24, justifyContent: 'center' },
-  header: { alignItems: 'center', marginBottom: 40 },
-  logoPlaceholder: { width: 64, height: 64, borderRadius: 32, borderWidth: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
-  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
-  subtitle: { fontSize: 14 },
-  form: { marginBottom: 32 },
-  inputLabel: { fontSize: 14, fontWeight: '600', marginBottom: 8, marginTop: 16 },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, paddingHorizontal: 16, height: 56 },
-  inputIcon: { marginRight: 12 },
-  input: { flex: 1, fontSize: 16 },
-  forgotPassword: { alignSelf: 'flex-end', marginTop: 12, marginBottom: 24 },
-  forgotPasswordText: { fontSize: 14 },
-  signInBtn: { height: 56, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  signInBtnText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
-  dividerContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 32 },
-  divider: { flex: 1, height: 1 },
-  dividerText: { paddingHorizontal: 16, fontSize: 14 },
-  googleBtn: { height: 56, flexDirection: 'row', borderRadius: 12, borderWidth: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 32 },
-  googleBtnText: { fontSize: 16, fontWeight: '600' },
-  footer: { flexDirection: 'row', justifyContent: 'center' },
-});

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
@@ -17,24 +17,24 @@ export default function ChooseSportScreen() {
   const [selectedSport, setSelectedSport] = useState('Cricket');
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: theme.background }}>
       
       {/* Header & Progress */}
-      <View style={styles.header}>
+      <View className="flex-row items-center px-6 pt-2 mb-4">
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={24} color={theme.text} />
         </TouchableOpacity>
-        <View style={styles.topProgressWrapper}>
+        <View className="flex-1 px-8 pt-2">
            <ProgressIndicator totalSteps={4} currentStep={2} />
         </View>
-        <View style={{ width: 24 }} />
+        <View className="w-6" />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.title, { color: theme.text }]}>Choose Your Sport</Text>
-        <Text style={[styles.subtitle, { color: theme.subText }]}>Select the sport you're most passionate about.</Text>
+      <ScrollView contentContainerClassName="px-6 pb-6" showsVerticalScrollIndicator={false}>
+        <Text className="text-2xl font-bold mb-2" style={{ color: theme.text }}>Choose Your Sport</Text>
+        <Text className="text-sm mb-8" style={{ color: theme.subText }}>Select the sport you're most passionate about.</Text>
 
-        <View style={styles.list}>
+        <View className="flex-1">
           <SportCard 
             sport="Cricket" 
             description="Join matches, tournaments and build your cricket journey." 
@@ -81,90 +81,28 @@ export default function ChooseSportScreen() {
       </ScrollView>
 
       {/* Footer Area */}
-      <View style={[styles.footer, { backgroundColor: theme.background }]}>
+      <View className="px-6 pb-8 pt-4" style={{ backgroundColor: theme.background }}>
         <PrimaryButton 
           title="Continue" 
           onPress={() => navigation.navigate('CricketProfile')} 
           disabled={!selectedSport}
         />
-        <View style={styles.bottomProgressWrapper}>
+        <View className="mt-8">
            <ProgressIndicator totalSteps={4} currentStep={3} />
         </View>
         
         {/* Footer Info Area */}
-        <View style={styles.footerInfo}>
-           <Feather name="activity" size={40} color={theme.primary} style={styles.footerIcon} />
-           <View style={{flex: 1}}>
-             <Text style={[styles.footerTitle, { color: theme.text }]}>CHOOSE YOUR SPORT</Text>
-             <Text style={[styles.footerDesc, { color: theme.subText }]}>Pick the sport you love. More sports coming soon.</Text>
-             <Text style={[styles.footerCheck, { color: theme.subText }]}><Feather name="check" size={14} color={theme.primary}/> Multiple sports to choose from</Text>
-             <Text style={[styles.footerCheck, { color: theme.subText }]}><Feather name="check" size={14} color={theme.primary}/> Cricket-first approach</Text>
-             <Text style={[styles.footerCheck, { color: theme.subText }]}><Feather name="check" size={14} color={theme.primary}/> Easy selection</Text>
+        <View className="flex-row mt-4">
+           <Feather name="activity" size={40} color={theme.primary} className="mr-4" />
+           <View className="flex-1">
+             <Text className="text-sm font-bold mb-1" style={{ color: theme.text }}>CHOOSE YOUR SPORT</Text>
+             <Text className="text-xs mb-2" style={{ color: theme.subText }}>Pick the sport you love. More sports coming soon.</Text>
+             <Text className="text-xs mb-1" style={{ color: theme.subText }}><Feather name="check" size={14} color={theme.primary}/> Multiple sports to choose from</Text>
+             <Text className="text-xs mb-1" style={{ color: theme.subText }}><Feather name="check" size={14} color={theme.primary}/> Cricket-first approach</Text>
+             <Text className="text-xs mb-1" style={{ color: theme.subText }}><Feather name="check" size={14} color={theme.primary}/> Easy selection</Text>
            </View>
         </View>
       </View>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 8,
-    marginBottom: 16,
-  },
-  topProgressWrapper: {
-    flex: 1,
-    paddingHorizontal: 32,
-    paddingTop: 8,
-  },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    marginBottom: 32,
-  },
-  list: {
-    flex: 1,
-  },
-  footer: {
-    paddingHorizontal: 24,
-    paddingBottom: 32,
-    paddingTop: 16,
-  },
-  bottomProgressWrapper: {
-    marginTop: 32,
-  },
-  footerInfo: {
-    flexDirection: 'row',
-    marginTop: 16,
-  },
-  footerIcon: {
-    marginRight: 16,
-  },
-  footerTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  footerDesc: {
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  footerCheck: {
-    fontSize: 12,
-    marginBottom: 4,
-  }
-});

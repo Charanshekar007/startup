@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
@@ -75,61 +75,61 @@ export default function VerificationScreen({ route }) {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: theme.background }}>
       
       {/* Top Header & Progress */}
-      <View style={styles.header}>
+      <View className="flex-row items-center px-6 pt-2 mb-4">
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={24} color={theme.text} />
         </TouchableOpacity>
-        <View style={styles.topProgressWrapper}>
+        <View className="flex-1 px-8 pt-2">
            <ProgressIndicator totalSteps={4} currentStep={1} />
         </View>
-        <View style={{ width: 24 }} />
+        <View className="w-6" />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerClassName="px-6 items-center" showsVerticalScrollIndicator={false}>
         
         {/* Success Illustration Mock */}
-        <View style={styles.illustrationContainer}>
-          <View style={[styles.glow, { backgroundColor: theme.primary, opacity: 0.15 }]} />
-          <View style={[styles.iconCircle, { backgroundColor: theme.primary }]}>
-             <Ionicons name="send" size={32} color="#000" style={{ marginLeft: -4 }} />
+        <View className="h-[100px] justify-center items-center mb-6">
+          <View className="absolute w-20 h-20 rounded-full" style={{ backgroundColor: theme.primary, opacity: 0.15, transform: [{ scale: 1.5 }] }} />
+          <View className="w-[72px] h-[72px] rounded-[36px] justify-center items-center" style={{ backgroundColor: theme.primary }}>
+             <Ionicons name="send" size={32} color="#000" className="-ml-1" />
           </View>
         </View>
 
-        <Text style={[styles.title, { color: theme.text }]}>Account Created!</Text>
+        <Text className="text-2xl font-bold mb-2" style={{ color: theme.text }}>Account Created!</Text>
         
         {/* Now displaying the dynamic email! */}
-        <Text style={[styles.subtitle, { color: theme.subText }]}>
+        <Text className="text-sm text-center leading-5 mb-8" style={{ color: theme.subText }}>
           We've sent a verification code to{'\n'}
-          <Text style={{ color: theme.text, fontWeight: '600' }}>{userEmail}</Text>
+          <Text className="font-semibold" style={{ color: theme.text }}>{userEmail}</Text>
         </Text>
 
         {/* OTP Card */}
-        <View style={[styles.card, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder }]}>
-          <Text style={[styles.cardTitle, { color: theme.text }]}>Verify Your Email</Text>
-          <Text style={[styles.cardSubtitle, { color: theme.subText }]}>Enter the 6-digit code sent to your email.</Text>
+        <View className="w-full rounded-2xl border p-6 mb-8" style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder }}>
+          <Text className="text-lg font-bold mb-1" style={{ color: theme.text }}>Verify Your Email</Text>
+          <Text className="text-[13px] mb-6" style={{ color: theme.subText }}>Enter the 6-digit code sent to your email.</Text>
           
           <OTPInput onOtpChange={setEnteredOtp} />
 
           {/* Error Message Display */}
           {errorMessage ? (
-            <Text style={{ color: '#FF453A', textAlign: 'center', marginBottom: 16, fontWeight: '600' }}>
+            <Text className="text-center mb-4 font-semibold text-[#FF453A]">
               {errorMessage}
             </Text>
           ) : null}
 
           {/* Dynamic Countdown Timer */}
-          <View style={styles.resendContainer}>
-            <Text style={[styles.resendText, { color: theme.subText }]}>Didn't receive code? </Text>
+          <View className="flex-row justify-center mb-6">
+            <Text className="text-[13px]" style={{ color: theme.subText }}>Didn't receive code? </Text>
             {timer > 0 ? (
-              <Text style={[styles.resendText, { color: theme.subText }]}>
+              <Text className="text-[13px]" style={{ color: theme.subText }}>
                 Resend in 00:{timer < 10 ? `0${timer}` : timer}
               </Text>
             ) : (
               <TouchableOpacity onPress={generateAndSendOTP}>
-                <Text style={[styles.resendText, { color: theme.primary, fontWeight: 'bold' }]}>
+                <Text className="text-[13px] font-bold" style={{ color: theme.primary }}>
                   Resend Now
                 </Text>
               </TouchableOpacity>
@@ -143,19 +143,19 @@ export default function VerificationScreen({ route }) {
           />
           
           {/* Developer Helper to bypass browser pop-up blockers */}
-          <Text style={{ color: theme.primary, textAlign: 'center', marginTop: 16, fontSize: 12, opacity: 0.8 }}>
+          <Text className="text-center mt-4 text-xs opacity-80" style={{ color: theme.primary }}>
             (Dev Mock OTP: {generatedOtp})
           </Text>
         </View>
 
         {/* Security Section */}
-        <View style={styles.securityWrapper}>
-          <View style={styles.verticalSecurity}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-              <Feather name="shield" size={18} color={theme.primary} style={{ marginRight: 8 }} />
-              <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '600' }}>Secure Verification</Text>
+        <View className="w-full pl-4 mb-6">
+          <View className="flex-col items-start">
+            <View className="flex-row items-center mb-1">
+              <Feather name="shield" size={18} color={theme.primary} className="mr-2" />
+              <Text className="text-[13px] font-semibold" style={{ color: theme.primary }}>Secure Verification</Text>
             </View>
-            <Text style={{ color: theme.subText, fontSize: 12, marginLeft: 26 }}>
+            <Text className="text-xs ml-[26px]" style={{ color: theme.subText }}>
               We never share your information{'\n'}with anyone.
             </Text>
           </View>
@@ -164,16 +164,16 @@ export default function VerificationScreen({ route }) {
       </ScrollView>
 
       {/* Bottom Progress Footer */}
-      <View style={styles.bottomProgress}>
+      <View className="px-6 pb-8">
         <ProgressIndicator totalSteps={4} currentStep={2} />
-        <View style={styles.footerVerificationInfo}>
-           <Feather name="shield" size={40} color={theme.primary} style={styles.footerIcon} />
-           <View style={{flex: 1}}>
-             <Text style={[styles.footerTitle, { color: theme.text }]}>VERIFICATION</Text>
-             <Text style={[styles.footerDesc, { color: theme.subText }]}>Email verification to keep your account secure.</Text>
-             <Text style={[styles.footerCheck, { color: theme.subText }]}><Feather name="check" size={14} color={theme.primary}/> 6-digit OTP verification</Text>
-             <Text style={[styles.footerCheck, { color: theme.subText }]}><Feather name="check" size={14} color={theme.primary}/> Resend option</Text>
-             <Text style={[styles.footerCheck, { color: theme.subText }]}><Feather name="check" size={14} color={theme.primary}/> Secure and private</Text>
+        <View className="flex-row mt-4">
+           <Feather name="shield" size={40} color={theme.primary} className="mr-4" />
+           <View className="flex-1">
+             <Text className="text-sm font-bold mb-1" style={{ color: theme.text }}>VERIFICATION</Text>
+             <Text className="text-xs mb-2" style={{ color: theme.subText }}>Email verification to keep your account secure.</Text>
+             <Text className="text-xs mb-1" style={{ color: theme.subText }}><Feather name="check" size={14} color={theme.primary}/> 6-digit OTP verification</Text>
+             <Text className="text-xs mb-1" style={{ color: theme.subText }}><Feather name="check" size={14} color={theme.primary}/> Resend option</Text>
+             <Text className="text-xs mb-1" style={{ color: theme.subText }}><Feather name="check" size={14} color={theme.primary}/> Secure and private</Text>
            </View>
         </View>
       </View>
@@ -181,111 +181,3 @@ export default function VerificationScreen({ route }) {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 8,
-    marginBottom: 16,
-  },
-  topProgressWrapper: {
-    flex: 1,
-    paddingHorizontal: 32,
-    paddingTop: 8,
-  },
-  scrollContent: {
-    paddingHorizontal: 24,
-    alignItems: 'center',
-  },
-  illustrationContainer: {
-    height: 100,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  glow: {
-    position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    transform: [{ scale: 1.5 }],
-  },
-  iconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 32,
-  },
-  card: {
-    width: '100%',
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 24,
-    marginBottom: 32,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  cardSubtitle: {
-    fontSize: 13,
-    marginBottom: 24,
-  },
-  resendContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  resendText: {
-    fontSize: 13,
-  },
-  securityWrapper: {
-    width: '100%',
-    paddingLeft: 16,
-    marginBottom: 24,
-  },
-  verticalSecurity: {
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-  },
-  bottomProgress: {
-    paddingHorizontal: 24,
-    paddingBottom: 32,
-  },
-  footerVerificationInfo: {
-    flexDirection: 'row',
-    marginTop: 16,
-  },
-  footerIcon: {
-    marginRight: 16,
-  },
-  footerTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  footerDesc: {
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  footerCheck: {
-    fontSize: 12,
-    marginBottom: 4,
-  }
-});
