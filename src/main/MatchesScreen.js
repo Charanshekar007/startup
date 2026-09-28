@@ -3,9 +3,11 @@ import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useMatches } from '../context/MatchContext';
 
 export default function MatchesScreen() {
   const navigation = useNavigation();
+  const { matches = [] } = useMatches() || {};
   const [activeTab, setActiveTab] = useState('LIVE'); 
   const tabs = ['LIVE', 'UPCOMING', 'FOLLOWING', 'COMPLETED', 'MY MATCHES'];
 
@@ -16,8 +18,47 @@ export default function MatchesScreen() {
   };
 
   // ==========================================
-  // ALL MOCK DATA
+  // ALL MOCK DATA & CONTEXT DATA
   // ==========================================
+  
+  const contextLive = (matches || [])
+    .filter((m) => m.status === 'Live')
+    .map((m) => ({
+      id: m.id,
+      league: `${m.format || 'T20'} • ${m.type || 'PRACTICE'}`,
+      teamA: m.teamA,
+      teamB: m.teamB,
+      logoA: m.teamAObj?.logo || 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff',
+      logoB: m.teamBObj?.logo || 'https://ui-avatars.com/api/?name=WX&background=b9770e&color=fff',
+      scoreA: m.scoreA || '0/0',
+      oversA: m.oversA || '0.0 Ov',
+      scoreB: m.scoreB || '-/-',
+      oversB: m.oversB || 'Yet to bat',
+      status: `${m.tossWinner || m.teamA} elected to ${m.decision || 'Bat'}`,
+      venue: m.venue || 'Rajiv Cricket Ground, Hyderabad',
+      matchData: m,
+    }));
+
+  const contextCompleted = (matches || [])
+    .filter((m) => m.status === 'Completed')
+    .map((m) => ({
+      id: m.id,
+      league: `${m.format || 'T20'} • COMPLETED`,
+      date: m.date || 'Today',
+      teamA: m.teamA,
+      teamB: m.teamB,
+      logoA: m.teamAObj?.logo || 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff',
+      logoB: m.teamBObj?.logo || 'https://ui-avatars.com/api/?name=WX&background=b9770e&color=fff',
+      scoreA: m.scoreA || '165/7',
+      oversA: m.oversA || '20.0 Ov',
+      scoreB: m.scoreB || '166/4',
+      oversB: m.oversB || '18.2 Ov',
+      winner: m.winner ? (m.margin === 'Super Over' ? `${m.winner} won via Super Over` : `${m.winner} won`) : 'Match Completed',
+      margin: m.margin === 'Super Over' ? '' : (m.margin || ''),
+      venue: m.venue || 'Rajiv Cricket Ground, Hyderabad',
+      matchData: m,
+    }));
+
   
   const liveMatches = [
     { id: 'l1', league: 'KURUKSHETRA LEAGUE • T20', teamA: 'Falcons CC', teamB: 'Warriors XI', logoA: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff', logoB: 'https://ui-avatars.com/api/?name=WX&background=333&color=fff', scoreA: '186/7', oversA: '32.3 Ov', scoreB: '152/4', oversB: '30.1 Ov', status: 'Falcons CC elected to bat', venue: 'Rajiv Cricket Ground, Hyderabad' },
@@ -93,7 +134,11 @@ export default function MatchesScreen() {
   // ==========================================
   
   const LiveCard = ({ match }) => (
-    <View className="bg-[#121212] border border-[#1a4024] rounded-xl mb-4">
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={() => navigation.navigate('LiveScoring', { matchData: match.matchData || match })}
+      className="bg-[#121212] border border-[#1a4024] rounded-xl mb-4"
+    >
       <View className="flex-row justify-between items-center p-3 pb-0">
         <View className="px-[6px] py-[3px] rounded bg-[#23c55e]"><Text className="text-[9px] font-bold text-black">LIVE</Text></View>
         <Text className="text-[#888888] text-[10px] tracking-[0.5px] uppercase flex-1 ml-2">{match.league}</Text>
@@ -130,7 +175,7 @@ export default function MatchesScreen() {
         </View>
         <Feather name="chevron-right" size={16} color="#888888" />
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const UpcomingCard = ({ match }) => (
@@ -480,7 +525,7 @@ export default function MatchesScreen() {
         {activeTab === 'LIVE' && (
           <View>
             <SectionHeader icon="record-circle-outline" title="LIVE MATCHES" iconColor="#23c55e" />
-            {liveMatches.map(m => <LiveCard key={m.id} match={m} />)}
+            {[...contextLive, ...liveMatches].map(m => <LiveCard key={m.id} match={m} />)}
           </View>
         )}
 
@@ -504,7 +549,7 @@ export default function MatchesScreen() {
         {activeTab === 'COMPLETED' && (
           <View>
              <SubtitledHeader icon="trophy-outline" title="COMPLETED MATCHES" subtitle="Past results and completed fixtures" />
-             {completedMatches.map(m => <CompletedCard key={m.id} match={m} />)}
+             {[...contextCompleted, ...completedMatches].map(m => <CompletedCard key={m.id} match={m} />)}
           </View>
         )}
 

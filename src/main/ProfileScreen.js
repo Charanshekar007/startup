@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, Modal, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuthStore } from '../store/authStore';
 
 const theme = {
   bg: '#0a0a0a',
@@ -67,10 +69,38 @@ const POSTS_FEED = [
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
+  const logout = useAuthStore((state) => state.logout);
   const [activeTab, setActiveTab] = useState('Overview');
   const TABS = ['Overview', 'Stats', 'Matches', 'Posts'];
   const MATCH_FILTERS = ['All', 'T20', 'ODI', 'T10', 'Turf', 'College'];
   const [activeMatchFilter, setActiveMatchFilter] = useState('All');
+
+  // 3-dot menu and logout state
+  const [showMenuModal, setShowMenuModal] = useState(false);
+  const [showLogoutConfirmModal, setShowLogoutConfirmModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Logout handler using existing auth system
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      // 1. Wipe session from Zustand auth store
+      logout();
+
+      // 2. Clear any persisted session data from AsyncStorage
+      await AsyncStorage.removeItem('sports-app-auth');
+
+      // 3. Close modals
+      setShowLogoutConfirmModal(false);
+      setShowMenuModal(false);
+      setIsLoggingOut(false);
+    } catch (error) {
+      console.error('Logout error:', error);
+      setIsLoggingOut(false);
+      Alert.alert('Error', 'Unable to logout. Please try again.');
+    }
+  };
 
   // ==========================================
   // SHARED HEADER & INFO
@@ -84,7 +114,12 @@ export default function ProfileScreen() {
         <Text className="text-white text-base font-bold">Profile</Text>
         <View className="flex-row items-center">
           <TouchableOpacity style={{ marginRight: 16 }}><Feather name="share-2" size={22} color={theme.text} /></TouchableOpacity>
-          <TouchableOpacity><Feather name="more-horizontal" size={24} color={theme.text} /></TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setShowMenuModal(true)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Feather name="more-horizontal" size={24} color={theme.text} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -634,6 +669,148 @@ export default function ProfileScreen() {
 
 
   // ==========================================
+  // 3-DOT OPTIONS MENU MODAL
+  // ==========================================
+  const renderMenuModal = () => (
+    <Modal
+      visible={showMenuModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowMenuModal(false)}
+    >
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={() => setShowMenuModal(false)}
+        className="flex-1 bg-black/70 justify-end"
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={(e) => e.stopPropagation()}
+          className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5"
+        >
+          {/* Header */}
+          <View className="flex-row justify-between items-center pb-3 border-b border-[#222222] mb-3">
+            <Text className="text-white text-base font-bold">Profile Options</Text>
+            <TouchableOpacity onPress={() => setShowMenuModal(false)} className="p-1">
+              <Feather name="x" size={20} color="#888888" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Menu Options */}
+          <TouchableOpacity
+            onPress={() => {
+              setShowMenuModal(false);
+            }}
+            className="p-3.5 bg-[#181818] rounded-xl mb-2.5 flex-row items-center active:bg-[#202020]"
+          >
+            <View className="w-8 h-8 rounded-lg bg-[#222222] items-center justify-center mr-3">
+              <Feather name="share-2" size={16} color="#ffffff" />
+            </View>
+            <Text className="text-white text-sm font-semibold flex-1">Share Profile</Text>
+            <Feather name="chevron-right" size={16} color="#666666" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              setShowMenuModal(false);
+            }}
+            className="p-3.5 bg-[#181818] rounded-xl mb-2.5 flex-row items-center active:bg-[#202020]"
+          >
+            <View className="w-8 h-8 rounded-lg bg-[#222222] items-center justify-center mr-3">
+              <Feather name="edit-3" size={16} color="#ffffff" />
+            </View>
+            <Text className="text-white text-sm font-semibold flex-1">Edit Profile</Text>
+            <Feather name="chevron-right" size={16} color="#666666" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              setShowMenuModal(false);
+            }}
+            className="p-3.5 bg-[#181818] rounded-xl mb-2.5 flex-row items-center active:bg-[#202020]"
+          >
+            <View className="w-8 h-8 rounded-lg bg-[#222222] items-center justify-center mr-3">
+              <Feather name="settings" size={16} color="#ffffff" />
+            </View>
+            <Text className="text-white text-sm font-semibold flex-1">Settings</Text>
+            <Feather name="chevron-right" size={16} color="#666666" />
+          </TouchableOpacity>
+
+          {/* Logout Item - Visually Distinguishable as Destructive */}
+          <TouchableOpacity
+            onPress={() => {
+              setShowMenuModal(false);
+              setShowLogoutConfirmModal(true);
+            }}
+            className="p-3.5 bg-[#2a1315] border border-[#ef4444]/30 rounded-xl mt-1 flex-row items-center active:bg-[#38181c]"
+          >
+            <View className="w-8 h-8 rounded-lg bg-[#3f1618] items-center justify-center mr-3">
+              <Feather name="log-out" size={16} color="#ef4444" />
+            </View>
+            <Text className="text-[#ef4444] text-sm font-bold flex-1">Logout</Text>
+            <Feather name="chevron-right" size={16} color="#ef4444" />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  // ==========================================
+  // LOGOUT CONFIRMATION DIALOG MODAL
+  // ==========================================
+  const renderLogoutConfirmModal = () => (
+    <Modal
+      visible={showLogoutConfirmModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => {
+        if (!isLoggingOut) setShowLogoutConfirmModal(false);
+      }}
+    >
+      <View className="flex-1 bg-black/75 justify-center items-center px-5">
+        <View className="bg-[#121212] border border-[#222222] rounded-2xl p-5 w-full max-w-sm">
+          {/* Destructive Icon Badge */}
+          <View className="w-12 h-12 rounded-full bg-[#2a1315] border border-[#ef4444]/40 items-center justify-center mb-4 self-center">
+            <Feather name="log-out" size={22} color="#ef4444" />
+          </View>
+
+          {/* Title and Confirmation Prompt */}
+          <Text className="text-white text-lg font-bold text-center mb-1.5">Logout?</Text>
+          <Text className="text-[#888888] text-sm text-center mb-6">
+            Are you sure you want to logout?
+          </Text>
+
+          {/* Action Buttons */}
+          <View className="flex-row">
+            <TouchableOpacity
+              disabled={isLoggingOut}
+              onPress={() => setShowLogoutConfirmModal(false)}
+              className="flex-1 py-3 rounded-xl bg-[#1a1a1a] border border-[#333333] items-center justify-center mr-2 active:bg-[#252525]"
+            >
+              <Text className="text-[#888888] text-sm font-bold">Cancel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              disabled={isLoggingOut}
+              onPress={handleLogout}
+              className="flex-1 py-3 rounded-xl bg-[#ef4444] items-center justify-center ml-2 active:bg-[#dc2626]"
+            >
+              {isLoggingOut ? (
+                <View className="flex-row items-center justify-center">
+                  <ActivityIndicator size="small" color="#ffffff" />
+                  <Text className="text-white text-sm font-bold ml-2">Logging out...</Text>
+                </View>
+              ) : (
+                <Text className="text-white text-sm font-bold">Logout</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // ==========================================
   // MAIN RENDER
   // ==========================================
   return (
@@ -645,6 +822,8 @@ export default function ProfileScreen() {
         {activeTab === 'Matches' && renderMatches()}
         {activeTab === 'Posts' && renderPosts()}
       </ScrollView>
+      {renderMenuModal()}
+      {renderLogoutConfirmModal()}
     </SafeAreaView>
   );
 }

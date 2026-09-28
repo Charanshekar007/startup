@@ -12,6 +12,7 @@ import MainTabs from './src/navigation/MainTabs';
 
 import MessagingModule from './src/main/MessagingModule';
 import NotificationsScreen from './src/main/NotificationsScreen';
+import LiveScoringScreen from './src/main/LiveScoringScreen';
 
 import { useAuthStore } from './src/store/authStore';
 
@@ -23,6 +24,7 @@ function AppNavigator() {
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen name="Messages" component={MessagingModule} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
+      <Stack.Screen name="LiveScoring" component={LiveScoringScreen} />
     </Stack.Navigator>
   );
 }
