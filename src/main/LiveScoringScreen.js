@@ -9,7 +9,7 @@ import {
   Modal,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons, Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useMatches } from '../context/MatchContext';
@@ -42,6 +42,8 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   } catch (e) {}
   const navigation = navProp || navHook;
   const route = routeProp || routeHook;
+  const insets = useSafeAreaInsets();
+  const bottomInset = insets?.bottom || 0;
 
   const { activeMatch, updateMatch } = useMatches() || {};
   const matchParam = route?.params?.matchData || route?.params?.match || activeMatch;
@@ -270,7 +272,9 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
   // Equation
   const activeTotalOvers = isSuperOver ? 1 : totalOversMax;
-  const activeMaxWickets = isSuperOver ? 2 : 10;
+  const activeMaxWickets = isSuperOver
+    ? 2
+    : (currentBattingSquad?.length >= 2 ? Math.min(10, currentBattingSquad.length - 1) : 10);
   const oversDecimal = `${currentOverNumber}.${legalBalls}`;
   const totalBallsRemaining = isSuperOver
     ? Math.max(0, 6 - legalBalls)
@@ -278,6 +282,30 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const runsNeeded = isSuperOver
     ? (superOverTarget ? Math.max(0, superOverTarget - totalRuns) : 0)
     : (targetRuns ? Math.max(0, targetRuns - totalRuns) : 0);
+
+  const isInnings1Completed = currentInnings === 1 && (
+    firstInningsSummary !== null ||
+    currentOverNumber >= totalOversMax ||
+    totalWickets >= activeMaxWickets
+  );
+
+  const isSecondInningsCompleted = currentInnings === 2 && (
+    matchResult !== null ||
+    matchTiedData !== null ||
+    (targetRuns && totalRuns >= targetRuns) ||
+    currentOverNumber >= totalOversMax ||
+    totalWickets >= activeMaxWickets
+  );
+
+  const isSuperOverCompleted = isSuperOver && (
+    (superOverInnings === 1 && superOverInnings1Summary !== null) ||
+    (superOverInnings === 2 && matchResult !== null) ||
+    currentOverNumber >= 1 ||
+    totalWickets >= 2 ||
+    (superOverInnings === 2 && superOverTarget && totalRuns >= superOverTarget)
+  );
+
+  const isScoringLocked = isInnings1Completed || isSecondInningsCompleted || isSuperOverCompleted;
 
   // ==========================================
   // SCORING HISTORY (UNDO ENGINE)
@@ -310,6 +338,12 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         previousBowlerId,
         commentaryList: [...commentaryList],
         showBowlerSelectDrawer,
+        firstInningsSummary: firstInningsSummary ? JSON.parse(JSON.stringify(firstInningsSummary)) : null,
+        matchResult: matchResult ? JSON.parse(JSON.stringify(matchResult)) : null,
+        matchTiedData: matchTiedData ? JSON.parse(JSON.stringify(matchTiedData)) : null,
+        secondInningsSummary: secondInningsSummary ? JSON.parse(JSON.stringify(secondInningsSummary)) : null,
+        targetRuns,
+        currentInnings,
       },
     ]);
   };
@@ -348,6 +382,23 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     setPreviousBowlerId(previousState.previousBowlerId);
     setCommentaryList(previousState.commentaryList);
     setShowBowlerSelectDrawer(previousState.showBowlerSelectDrawer);
+
+    setFirstInningsSummary(previousState.firstInningsSummary || null);
+    setMatchResult(previousState.matchResult || null);
+    setMatchTiedData(previousState.matchTiedData || null);
+    setSecondInningsSummary(previousState.secondInningsSummary || null);
+    if (previousState.targetRuns !== undefined) setTargetRuns(previousState.targetRuns);
+    if (previousState.currentInnings !== undefined) setCurrentInnings(previousState.currentInnings);
+
+    if (updateMatch && matchParam?.id) {
+      updateMatch(matchParam.id, {
+        status: 'Live',
+        winner: null,
+        margin: null,
+      });
+    }
+
+    setCurrentScreen('MAIN');
   };
 
   // Helper to update current striker's stats in scorecard
@@ -360,7 +411,14 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   // ==========================================
   // INNINGS & MATCH COMPLETION ENGINE
   // ==========================================
-  const handleEndFirstInnings = (finalRuns, finalWickets, finalOversDecimal) => {
+  const handleEndFirstInnings = (
+    finalRuns,
+    finalWickets,
+    finalOversDecimal,
+    customBatters,
+    customBowlers,
+    customPastOvers
+  ) => {
     const summary = {
       battingTeam: firstInningsBattingTeam,
       bowlingTeam: firstInningsBowlingTeam,
@@ -369,10 +427,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       overs: finalOversDecimal || `${currentOverNumber}.${legalBalls}`,
       extrasTotal,
       extrasBreakdown: { ...extrasBreakdown },
-      batters: [...battersScorecard],
-      bowlers: JSON.parse(JSON.stringify(bowlerStatsMap)),
+      batters: customBatters || [...battersScorecard],
+      bowlers: customBowlers || JSON.parse(JSON.stringify(bowlerStatsMap)),
       fallOfWickets: [...fallOfWickets],
-      pastOvers: JSON.parse(JSON.stringify(pastOvers)),
+      pastOvers: customPastOvers || JSON.parse(JSON.stringify(pastOvers)),
       target: (finalRuns !== undefined ? finalRuns : totalRuns) + 1,
       wicketkeeper,
     };
@@ -610,6 +668,9 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     finalWickets,
     finalOversDecimal,
     superOversList,
+    customBatters,
+    customBowlers,
+    customPastOvers,
   }) => {
     const inn1 = firstInningsSummary || {
       battingTeam: firstInningsBattingTeam,
@@ -634,10 +695,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       overs: finalOversDecimal || `${currentOverNumber}.${legalBalls}`,
       extrasTotal,
       extrasBreakdown: { ...extrasBreakdown },
-      batters: [...battersScorecard],
-      bowlers: JSON.parse(JSON.stringify(bowlerStatsMap)),
+      batters: customBatters || [...battersScorecard],
+      bowlers: customBowlers || JSON.parse(JSON.stringify(bowlerStatsMap)),
       fallOfWickets: [...fallOfWickets],
-      pastOvers: JSON.parse(JSON.stringify(pastOvers)),
+      pastOvers: customPastOvers || JSON.parse(JSON.stringify(pastOvers)),
       wicketkeeper,
     };
 
@@ -666,7 +727,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     setCurrentScreen('MATCH_RESULT');
   };
 
-  const checkDeliveryProgress = (newTotalRuns, newTotalWickets, nextBallsInOver, nextOverNum, isOverEnd) => {
+  const checkDeliveryProgress = (newTotalRuns, newTotalWickets, nextBallsInOver, nextOverNum, isOverEnd, customBatters, customBowlers, customPastOvers) => {
     // Super Over Progress Check
     if (isSuperOver) {
       if (superOverInnings === 1) {
@@ -690,7 +751,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     // 2nd Innings Target Chase check
     if (currentInnings === 2) {
       if (targetRuns && newTotalRuns >= targetRuns) {
-        const marginWickets = 10 - newTotalWickets;
+        const marginWickets = activeMaxWickets - newTotalWickets;
         handleMatchComplete({
           winner: firstInningsBowlingTeam,
           margin: `${marginWickets} wicket${marginWickets === 1 ? '' : 's'}`,
@@ -698,11 +759,14 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           finalRuns: newTotalRuns,
           finalWickets: newTotalWickets,
           finalOversDecimal: isOverEnd ? `${nextOverNum}.0` : `${currentOverNumber}.${nextBallsInOver}`,
+          customBatters,
+          customBowlers,
+          customPastOvers,
         });
         return true;
       }
 
-      if (newTotalWickets >= 10 || (isOverEnd && nextOverNum >= totalOversMax)) {
+      if (newTotalWickets >= activeMaxWickets || (isOverEnd && nextOverNum >= totalOversMax)) {
         const finalOvers = isOverEnd ? `${nextOverNum}.0` : `${currentOverNumber}.${nextBallsInOver}`;
         if (targetRuns && newTotalRuns < targetRuns - 1) {
           const marginRuns = targetRuns - 1 - newTotalRuns;
@@ -713,6 +777,9 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
             finalRuns: newTotalRuns,
             finalWickets: newTotalWickets,
             finalOversDecimal: finalOvers,
+            customBatters,
+            customBowlers,
+            customPastOvers,
           });
         } else if (targetRuns && newTotalRuns === targetRuns - 1) {
           handleMatchTied(newTotalRuns, newTotalWickets, finalOvers);
@@ -723,9 +790,9 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     // 1st Innings Completion check
     if (currentInnings === 1) {
-      if (newTotalWickets >= 10 || (isOverEnd && nextOverNum >= totalOversMax)) {
+      if (newTotalWickets >= activeMaxWickets || (isOverEnd && nextOverNum >= totalOversMax)) {
         const finalOvers = isOverEnd ? `${nextOverNum}.0` : `${currentOverNumber}.${nextBallsInOver}`;
-        handleEndFirstInnings(newTotalRuns, newTotalWickets, finalOvers);
+        handleEndFirstInnings(newTotalRuns, newTotalWickets, finalOvers, customBatters, customBowlers, customPastOvers);
         return true;
       }
     }
@@ -734,27 +801,35 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   };
 
   // Centralized over completion
-  const completeOverAndPromptNextBowler = (finishedBalls, finishedBowler) => {
+  const completeOverAndPromptNextBowler = (
+    finishedBalls,
+    finishedBowler,
+    currentRuns = totalRuns,
+    currentWickets = totalWickets,
+    currentBatters = battersScorecard,
+  ) => {
     const finishedOverNumber = currentOverNumber + 1;
     const overRuns = finishedBalls.reduce((acc, b) => acc + (b.runs || 0), 0);
 
-    setPastOvers((prev) => [
-      ...prev,
+    const newPastOvers = [
+      ...pastOvers,
       { overNum: finishedOverNumber, balls: finishedBalls.map((b) => b.value), runs: overRuns },
-    ]);
+    ];
+    setPastOvers(newPastOvers);
 
     const currentCompletedOvers = Math.floor(parseFloat(finishedBowler.overs || '0')) + 1;
     const isMaiden = overRuns === 0;
 
-    setBowlerStatsMap((prev) => ({
-      ...prev,
+    const newBowlerStatsMap = {
+      ...bowlerStatsMap,
       [finishedBowler.id]: {
         overs: currentCompletedOvers,
-        maidens: isMaiden ? (prev[finishedBowler.id]?.maidens || 0) + 1 : prev[finishedBowler.id]?.maidens || 0,
+        maidens: isMaiden ? (bowlerStatsMap[finishedBowler.id]?.maidens || 0) + 1 : bowlerStatsMap[finishedBowler.id]?.maidens || 0,
         runsConceded: finishedBowler.runsConceded,
         wickets: finishedBowler.wickets,
       },
-    }));
+    };
+    setBowlerStatsMap(newBowlerStatsMap);
 
     setPreviousBowlerId(finishedBowler.id);
     setCurrentOverBalls([]);
@@ -769,16 +844,51 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     // Check if match / innings ends right on this over completion
     if (isSuperOver) {
-      checkDeliveryProgress(totalRuns, totalWickets, 6, 1, true);
+      checkDeliveryProgress(currentRuns, currentWickets, 6, 1, true, currentBatters, newBowlerStatsMap, newPastOvers);
       return;
     }
 
     if (finishedOverNumber >= totalOversMax) {
       if (currentInnings === 1) {
-        handleEndFirstInnings(totalRuns, totalWickets, `${finishedOverNumber}.0`);
+        handleEndFirstInnings(
+          currentRuns,
+          currentWickets,
+          `${finishedOverNumber}.0`,
+          currentBatters,
+          newBowlerStatsMap,
+          newPastOvers
+        );
         return;
       } else if (currentInnings === 2) {
-        checkDeliveryProgress(totalRuns, totalWickets, 0, finishedOverNumber, true);
+        if (targetRuns && currentRuns >= targetRuns) {
+          const marginWickets = activeMaxWickets - currentWickets;
+          handleMatchComplete({
+            winner: firstInningsBowlingTeam,
+            margin: `${marginWickets} wicket${marginWickets === 1 ? '' : 's'}`,
+            resultText: `${firstInningsBowlingTeam} won by ${marginWickets} wicket${marginWickets === 1 ? '' : 's'}!`,
+            finalRuns: currentRuns,
+            finalWickets: currentWickets,
+            finalOversDecimal: `${finishedOverNumber}.0`,
+            customBatters: currentBatters,
+            customBowlers: newBowlerStatsMap,
+            customPastOvers: newPastOvers,
+          });
+        } else if (targetRuns && currentRuns < targetRuns - 1) {
+          const marginRuns = targetRuns - 1 - currentRuns;
+          handleMatchComplete({
+            winner: firstInningsBattingTeam,
+            margin: `${marginRuns} run${marginRuns === 1 ? '' : 's'}`,
+            resultText: `${firstInningsBattingTeam} won by ${marginRuns} run${marginRuns === 1 ? '' : 's'}!`,
+            finalRuns: currentRuns,
+            finalWickets: currentWickets,
+            finalOversDecimal: `${finishedOverNumber}.0`,
+            customBatters: currentBatters,
+            customBowlers: newBowlerStatsMap,
+            customPastOvers: newPastOvers,
+          });
+        } else if (targetRuns && currentRuns === targetRuns - 1) {
+          handleMatchTied(currentRuns, currentWickets, `${finishedOverNumber}.0`);
+        }
         return;
       }
     }
@@ -821,6 +931,11 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   // NORMAL DELIVERY (0, 1, 2, 3, 4, 6)
   // -----------------------------------------------------------------------
   const handleScoreRuns = (runs) => {
+    if (isScoringLocked) {
+      Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
+      return;
+    }
+
     saveCurrentStateToHistory();
 
     const newRuns = totalRuns + runs;
@@ -834,6 +949,19 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       sixes: runs === 6 ? striker.sixes + 1 : striker.sixes,
     };
     updateStrikerInScorecard(updatedStriker);
+
+    const updatedBattersScorecard = battersScorecard.map((b) =>
+      b.id === updatedStriker.id
+        ? {
+            ...b,
+            runs: updatedStriker.runs,
+            balls: updatedStriker.balls,
+            fours: updatedStriker.fours,
+            sixes: updatedStriker.sixes,
+            status: 'not out',
+          }
+        : b
+    );
 
     const updatedBowler = {
       ...bowler,
@@ -854,16 +982,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       ...prev,
     ]);
 
-    // Check target chase in 2nd innings or Super Over chasing innings
-    if ((isSuperOver && superOverInnings === 2 && superOverTarget && newRuns >= superOverTarget) ||
-        (!isSuperOver && currentInnings === 2 && targetRuns && newRuns >= targetRuns)) {
-      checkDeliveryProgress(newRuns, totalWickets, legalBalls + 1, currentOverNumber, false);
-      return;
-    }
-
     let nextLegalBalls = legalBalls + 1;
+    const isOverEnd = nextLegalBalls >= 6;
 
-    if (nextLegalBalls >= 6) {
+    if (isOverEnd) {
       if (runs % 2 === 0) {
         setStriker(nonStriker);
         setNonStriker(updatedStriker);
@@ -871,7 +993,6 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         setStriker(updatedStriker);
         setNonStriker(nonStriker);
       }
-      completeOverAndPromptNextBowler(updatedBalls, updatedBowler);
     } else {
       if (runs % 2 !== 0) {
         setStriker(nonStriker);
@@ -879,6 +1000,34 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       } else {
         setStriker(updatedStriker);
       }
+    }
+
+    // Check target chase in 2nd innings or Super Over chasing innings
+    if ((isSuperOver && superOverInnings === 2 && superOverTarget && newRuns >= superOverTarget) ||
+        (!isSuperOver && currentInnings === 2 && targetRuns && newRuns >= targetRuns)) {
+      if (isOverEnd) {
+        completeOverAndPromptNextBowler(updatedBalls, updatedBowler, newRuns, totalWickets, updatedBattersScorecard);
+      } else {
+        setLegalBalls(nextLegalBalls);
+        updatedBowler.overs = `${currentOverNumber}.${nextLegalBalls}`;
+        setBowler(updatedBowler);
+        const marginWickets = activeMaxWickets - totalWickets;
+        handleMatchComplete({
+          winner: firstInningsBowlingTeam,
+          margin: `${marginWickets} wicket${marginWickets === 1 ? '' : 's'}`,
+          resultText: `${firstInningsBowlingTeam} won by ${marginWickets} wicket${marginWickets === 1 ? '' : 's'}!`,
+          finalRuns: newRuns,
+          finalWickets: totalWickets,
+          finalOversDecimal: `${currentOverNumber}.${nextLegalBalls}`,
+          customBatters: updatedBattersScorecard,
+        });
+      }
+      return;
+    }
+
+    if (isOverEnd) {
+      completeOverAndPromptNextBowler(updatedBalls, updatedBowler, newRuns, totalWickets, updatedBattersScorecard);
+    } else {
       setLegalBalls(nextLegalBalls);
       updatedBowler.overs = `${currentOverNumber}.${nextLegalBalls}`;
       setBowler(updatedBowler);
@@ -889,6 +1038,11 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   // NO BALL HANDLERS
   // -----------------------------------------------------------------------
   const handleScoreNoBallRuns = (offBatRuns) => {
+    if (isScoringLocked) {
+      Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
+      return;
+    }
+
     saveCurrentStateToHistory();
 
     const teamRunsToAdd = 1 + offBatRuns;
@@ -909,6 +1063,19 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       sixes: offBatRuns === 6 ? striker.sixes + 1 : striker.sixes,
     };
     updateStrikerInScorecard(updatedStriker);
+
+    const updatedBattersScorecard = battersScorecard.map((b) =>
+      b.id === updatedStriker.id
+        ? {
+            ...b,
+            runs: updatedStriker.runs,
+            balls: updatedStriker.balls,
+            fours: updatedStriker.fours,
+            sixes: updatedStriker.sixes,
+            status: 'not out',
+          }
+        : b
+    );
 
     const updatedBowler = {
       ...bowler,
@@ -942,10 +1109,29 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     ]);
 
     setShowNoBallDrawer(false);
-    checkDeliveryProgress(newTotal, totalWickets, legalBalls, currentOverNumber, false);
+
+    if ((isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) ||
+        (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns)) {
+      const marginWickets = activeMaxWickets - totalWickets;
+      handleMatchComplete({
+        winner: firstInningsBowlingTeam,
+        margin: `${marginWickets} wicket${marginWickets === 1 ? '' : 's'}`,
+        resultText: `${firstInningsBowlingTeam} won by ${marginWickets} wicket${marginWickets === 1 ? '' : 's'}!`,
+        finalRuns: newTotal,
+        finalWickets: totalWickets,
+        finalOversDecimal: `${currentOverNumber}.${legalBalls}`,
+        customBatters: updatedBattersScorecard,
+      });
+      return;
+    }
   };
 
   const handleScoreNoBallByes = (byeRuns) => {
+    if (isScoringLocked) {
+      Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
+      return;
+    }
+
     saveCurrentStateToHistory();
 
     const teamRunsToAdd = 1 + byeRuns;
@@ -961,6 +1147,12 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     const updatedStriker = { ...striker, balls: striker.balls + 1 };
     updateStrikerInScorecard(updatedStriker);
+
+    const updatedBattersScorecard = battersScorecard.map((b) =>
+      b.id === updatedStriker.id
+        ? { ...b, balls: updatedStriker.balls, status: 'not out' }
+        : b
+    );
 
     const updatedBowler = { ...bowler, runsConceded: bowler.runsConceded + 1 };
     setBowler(updatedBowler);
@@ -989,10 +1181,29 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     setShowNoBallDrawer(false);
     setNoBallSubStep('MAIN');
-    checkDeliveryProgress(newTotal, totalWickets, legalBalls, currentOverNumber, false);
+
+    if ((isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) ||
+        (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns)) {
+      const marginWickets = activeMaxWickets - totalWickets;
+      handleMatchComplete({
+        winner: firstInningsBowlingTeam,
+        margin: `${marginWickets} wicket${marginWickets === 1 ? '' : 's'}`,
+        resultText: `${firstInningsBowlingTeam} won by ${marginWickets} wicket${marginWickets === 1 ? '' : 's'}!`,
+        finalRuns: newTotal,
+        finalWickets: totalWickets,
+        finalOversDecimal: `${currentOverNumber}.${legalBalls}`,
+        customBatters: updatedBattersScorecard,
+      });
+      return;
+    }
   };
 
   const handleScoreNoBallLegByes = (legByeRuns) => {
+    if (isScoringLocked) {
+      Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
+      return;
+    }
+
     saveCurrentStateToHistory();
 
     const teamRunsToAdd = 1 + legByeRuns;
@@ -1008,6 +1219,12 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     const updatedStriker = { ...striker, balls: striker.balls + 1 };
     updateStrikerInScorecard(updatedStriker);
+
+    const updatedBattersScorecard = battersScorecard.map((b) =>
+      b.id === updatedStriker.id
+        ? { ...b, balls: updatedStriker.balls, status: 'not out' }
+        : b
+    );
 
     const updatedBowler = { ...bowler, runsConceded: bowler.runsConceded + 1 };
     setBowler(updatedBowler);
@@ -1036,10 +1253,29 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     setShowNoBallDrawer(false);
     setNoBallSubStep('MAIN');
-    checkDeliveryProgress(newTotal, totalWickets, legalBalls, currentOverNumber, false);
+
+    if ((isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) ||
+        (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns)) {
+      const marginWickets = activeMaxWickets - totalWickets;
+      handleMatchComplete({
+        winner: firstInningsBowlingTeam,
+        margin: `${marginWickets} wicket${marginWickets === 1 ? '' : 's'}`,
+        resultText: `${firstInningsBowlingTeam} won by ${marginWickets} wicket${marginWickets === 1 ? '' : 's'}!`,
+        finalRuns: newTotal,
+        finalWickets: totalWickets,
+        finalOversDecimal: `${currentOverNumber}.${legalBalls}`,
+        customBatters: updatedBattersScorecard,
+      });
+      return;
+    }
   };
 
   const handleScoreNoBallWicket = () => {
+    if (isScoringLocked) {
+      Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
+      return;
+    }
+
     saveCurrentStateToHistory();
 
     const teamRunsToAdd = 1 + noBallRunOutRuns;
@@ -1055,22 +1291,15 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     setBowler(updatedBowler);
 
     const dismissedBatter = noBallRunOutBatter === 'striker' ? striker : nonStriker;
-    setFallOfWickets((prev) => [
-      ...prev,
+    const newFallOfWickets = [
+      ...fallOfWickets,
       { wicket: newWickets, score: newTotal, batter: dismissedBatter.name },
-    ]);
+    ];
+    setFallOfWickets(newFallOfWickets);
 
-    const remainingBatters = currentBattingSquad.filter(
-      (p) => !fallOfWickets.some((f) => f.batter === p.name) && p.name !== dismissedBatter.name && p.name !== (noBallRunOutBatter === 'striker' ? nonStriker.name : striker.name)
+    let updatedBattersScorecard = battersScorecard.map((b) =>
+      b.id === dismissedBatter.id ? { ...b, status: 'out', dismissal: 'run out' } : b
     );
-    const nextBatter = remainingBatters[0] || { id: `nb_${Date.now()}`, name: 'Next Batter', img: 'https://ui-avatars.com/api/?name=NB' };
-
-    const newBatterObj = { ...nextBatter, runs: 0, balls: 0, fours: 0, sixes: 0 };
-    if (noBallRunOutBatter === 'striker') {
-      setStriker(newBatterObj);
-    } else {
-      setNonStriker(newBatterObj);
-    }
 
     const newBallObj = { type: 'wicket', value: 'Nb+W', runs: teamRunsToAdd, isLegal: false };
     setCurrentOverBalls((prev) => [...prev, newBallObj]);
@@ -1084,13 +1313,75 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     setShowNoBallDrawer(false);
     setNoBallSubStep('MAIN');
-    checkDeliveryProgress(newTotal, newWickets, legalBalls, currentOverNumber, false);
+
+    // Check target chase in 2nd innings
+    if (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns) {
+      const marginWickets = activeMaxWickets - newWickets;
+      handleMatchComplete({
+        winner: firstInningsBowlingTeam,
+        margin: `${marginWickets} wicket${marginWickets === 1 ? '' : 's'}`,
+        resultText: `${firstInningsBowlingTeam} won by ${marginWickets} wicket${marginWickets === 1 ? '' : 's'}!`,
+        finalRuns: newTotal,
+        finalWickets: newWickets,
+        finalOversDecimal: `${currentOverNumber}.${legalBalls}`,
+        customBatters: updatedBattersScorecard,
+      });
+      return;
+    }
+
+    const dismissedNames = newFallOfWickets.map((f) => f.batter);
+    const otherActiveBatterName = noBallRunOutBatter === 'striker' ? nonStriker.name : striker.name;
+    const remainingBatters = currentBattingSquad.filter(
+      (p) => !dismissedNames.includes(p.name) && p.name !== otherActiveBatterName
+    );
+
+    const isAllOut = newWickets >= activeMaxWickets || remainingBatters.length === 0;
+
+    if (isAllOut) {
+      if (currentInnings === 1) {
+        handleEndFirstInnings(newTotal, newWickets, `${currentOverNumber}.${legalBalls}`, updatedBattersScorecard);
+      } else {
+        if (targetRuns && newTotal < targetRuns - 1) {
+          const marginRuns = targetRuns - 1 - newTotal;
+          handleMatchComplete({
+            winner: firstInningsBattingTeam,
+            margin: `${marginRuns} run${marginRuns === 1 ? '' : 's'}`,
+            resultText: `${firstInningsBattingTeam} won by ${marginRuns} run${marginRuns === 1 ? '' : 's'}!`,
+            finalRuns: newTotal,
+            finalWickets: newWickets,
+            finalOversDecimal: `${currentOverNumber}.${legalBalls}`,
+            customBatters: updatedBattersScorecard,
+          });
+        } else if (targetRuns && newTotal === targetRuns - 1) {
+          handleMatchTied(newTotal, newWickets, `${currentOverNumber}.${legalBalls}`);
+        }
+      }
+      return;
+    }
+
+    const nextBatter = remainingBatters[0] || { id: `nb_${Date.now()}`, name: 'Next Batter', img: 'https://ui-avatars.com/api/?name=NB' };
+    const newBatterObj = { ...nextBatter, runs: 0, balls: 0, fours: 0, sixes: 0 };
+    updatedBattersScorecard = updatedBattersScorecard.map((b) =>
+      b.id === nextBatter.id ? { ...b, status: 'not out', dismissal: 'batting' } : b
+    );
+    setBattersScorecard(updatedBattersScorecard);
+
+    if (noBallRunOutBatter === 'striker') {
+      setStriker(newBatterObj);
+    } else {
+      setNonStriker(newBatterObj);
+    }
   };
 
   // -----------------------------------------------------------------------
   // WIDE HANDLER
   // -----------------------------------------------------------------------
   const handleScoreWide = (extraRuns = 0) => {
+    if (isScoringLocked) {
+      Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
+      return;
+    }
+
     saveCurrentStateToHistory();
 
     const wideRuns = 1 + extraRuns;
@@ -1127,13 +1418,31 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     ]);
 
     setShowWideDrawer(false);
-    checkDeliveryProgress(newTotal, totalWickets, legalBalls, currentOverNumber, false);
+
+    if ((isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) ||
+        (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns)) {
+      const marginWickets = activeMaxWickets - totalWickets;
+      handleMatchComplete({
+        winner: firstInningsBowlingTeam,
+        margin: `${marginWickets} wicket${marginWickets === 1 ? '' : 's'}`,
+        resultText: `${firstInningsBowlingTeam} won by ${marginWickets} wicket${marginWickets === 1 ? '' : 's'}!`,
+        finalRuns: newTotal,
+        finalWickets: totalWickets,
+        finalOversDecimal: `${currentOverNumber}.${legalBalls}`,
+      });
+      return;
+    }
   };
 
   // -----------------------------------------------------------------------
   // BYE HANDLER
   // -----------------------------------------------------------------------
   const handleScoreBye = (byeRuns) => {
+    if (isScoringLocked) {
+      Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
+      return;
+    }
+
     saveCurrentStateToHistory();
 
     const newTotal = totalRuns + byeRuns;
@@ -1151,6 +1460,12 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     };
     updateStrikerInScorecard(updatedStriker);
 
+    const updatedBattersScorecard = battersScorecard.map((b) =>
+      b.id === updatedStriker.id
+        ? { ...b, balls: updatedStriker.balls, status: 'not out' }
+        : b
+    );
+
     const ballLabel = `${byeRuns}b`;
     const newBallObj = { type: 'bye', value: ballLabel, runs: byeRuns, isLegal: true, byeRuns };
     const updatedBalls = [...currentOverBalls, newBallObj];
@@ -1165,30 +1480,55 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     setShowByeDrawer(false);
 
+    let nextLegalBalls = legalBalls + 1;
+    const isOverEnd = nextLegalBalls >= 6;
+
+    let nextStriker = striker;
+    let nextNonStriker = nonStriker;
+    if (isOverEnd) {
+      if (byeRuns % 2 === 0) {
+        nextStriker = nonStriker;
+        nextNonStriker = updatedStriker;
+      } else {
+        nextStriker = updatedStriker;
+        nextNonStriker = nonStriker;
+      }
+    } else {
+      if (byeRuns % 2 !== 0) {
+        nextStriker = nonStriker;
+        nextNonStriker = updatedStriker;
+      } else {
+        nextStriker = updatedStriker;
+      }
+    }
+    setStriker(nextStriker);
+    setNonStriker(nextNonStriker);
+
     if ((isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) ||
         (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns)) {
-      checkDeliveryProgress(newTotal, totalWickets, legalBalls + 1, currentOverNumber, false);
+      if (isOverEnd) {
+        completeOverAndPromptNextBowler(updatedBalls, bowler, newTotal, totalWickets, updatedBattersScorecard);
+      } else {
+        setLegalBalls(nextLegalBalls);
+        const updatedBowler = { ...bowler, overs: `${currentOverNumber}.${nextLegalBalls}` };
+        setBowler(updatedBowler);
+        const marginWickets = activeMaxWickets - totalWickets;
+        handleMatchComplete({
+          winner: firstInningsBowlingTeam,
+          margin: `${marginWickets} wicket${marginWickets === 1 ? '' : 's'}`,
+          resultText: `${firstInningsBowlingTeam} won by ${marginWickets} wicket${marginWickets === 1 ? '' : 's'}!`,
+          finalRuns: newTotal,
+          finalWickets: totalWickets,
+          finalOversDecimal: `${currentOverNumber}.${nextLegalBalls}`,
+          customBatters: updatedBattersScorecard,
+        });
+      }
       return;
     }
 
-    let nextLegalBalls = legalBalls + 1;
-
-    if (nextLegalBalls >= 6) {
-      if (byeRuns % 2 === 0) {
-        setStriker(nonStriker);
-        setNonStriker(updatedStriker);
-      } else {
-        setStriker(updatedStriker);
-        setNonStriker(nonStriker);
-      }
-      completeOverAndPromptNextBowler(updatedBalls, bowler);
+    if (isOverEnd) {
+      completeOverAndPromptNextBowler(updatedBalls, bowler, newTotal, totalWickets, updatedBattersScorecard);
     } else {
-      if (byeRuns % 2 !== 0) {
-        setStriker(nonStriker);
-        setNonStriker(updatedStriker);
-      } else {
-        setStriker(updatedStriker);
-      }
       setLegalBalls(nextLegalBalls);
       const updatedBowler = { ...bowler, overs: `${currentOverNumber}.${nextLegalBalls}` };
       setBowler(updatedBowler);
@@ -1199,6 +1539,11 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   // LEG BYE HANDLER
   // -----------------------------------------------------------------------
   const handleScoreLegBye = (legByeRuns) => {
+    if (isScoringLocked) {
+      Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
+      return;
+    }
+
     saveCurrentStateToHistory();
 
     const newTotal = totalRuns + legByeRuns;
@@ -1216,6 +1561,12 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     };
     updateStrikerInScorecard(updatedStriker);
 
+    const updatedBattersScorecard = battersScorecard.map((b) =>
+      b.id === updatedStriker.id
+        ? { ...b, balls: updatedStriker.balls, status: 'not out' }
+        : b
+    );
+
     const ballLabel = `${legByeRuns}lb`;
     const newBallObj = { type: 'leg-bye', value: ballLabel, runs: legByeRuns, isLegal: true, legByeRuns };
     const updatedBalls = [...currentOverBalls, newBallObj];
@@ -1230,30 +1581,55 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     setShowLegByeDrawer(false);
 
+    let nextLegalBalls = legalBalls + 1;
+    const isOverEnd = nextLegalBalls >= 6;
+
+    let nextStriker = striker;
+    let nextNonStriker = nonStriker;
+    if (isOverEnd) {
+      if (legByeRuns % 2 === 0) {
+        nextStriker = nonStriker;
+        nextNonStriker = updatedStriker;
+      } else {
+        nextStriker = updatedStriker;
+        nextNonStriker = nonStriker;
+      }
+    } else {
+      if (legByeRuns % 2 !== 0) {
+        nextStriker = nonStriker;
+        nextNonStriker = updatedStriker;
+      } else {
+        nextStriker = updatedStriker;
+      }
+    }
+    setStriker(nextStriker);
+    setNonStriker(nextNonStriker);
+
     if ((isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) ||
         (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns)) {
-      checkDeliveryProgress(newTotal, totalWickets, legalBalls + 1, currentOverNumber, false);
+      if (isOverEnd) {
+        completeOverAndPromptNextBowler(updatedBalls, bowler, newTotal, totalWickets, updatedBattersScorecard);
+      } else {
+        setLegalBalls(nextLegalBalls);
+        const updatedBowler = { ...bowler, overs: `${currentOverNumber}.${nextLegalBalls}` };
+        setBowler(updatedBowler);
+        const marginWickets = activeMaxWickets - totalWickets;
+        handleMatchComplete({
+          winner: firstInningsBowlingTeam,
+          margin: `${marginWickets} wicket${marginWickets === 1 ? '' : 's'}`,
+          resultText: `${firstInningsBowlingTeam} won by ${marginWickets} wicket${marginWickets === 1 ? '' : 's'}!`,
+          finalRuns: newTotal,
+          finalWickets: totalWickets,
+          finalOversDecimal: `${currentOverNumber}.${nextLegalBalls}`,
+          customBatters: updatedBattersScorecard,
+        });
+      }
       return;
     }
 
-    let nextLegalBalls = legalBalls + 1;
-
-    if (nextLegalBalls >= 6) {
-      if (legByeRuns % 2 === 0) {
-        setStriker(nonStriker);
-        setNonStriker(updatedStriker);
-      } else {
-        setStriker(updatedStriker);
-        setNonStriker(nonStriker);
-      }
-      completeOverAndPromptNextBowler(updatedBalls, bowler);
+    if (isOverEnd) {
+      completeOverAndPromptNextBowler(updatedBalls, bowler, newTotal, totalWickets, updatedBattersScorecard);
     } else {
-      if (legByeRuns % 2 !== 0) {
-        setStriker(nonStriker);
-        setNonStriker(updatedStriker);
-      } else {
-        setStriker(updatedStriker);
-      }
       setLegalBalls(nextLegalBalls);
       const updatedBowler = { ...bowler, overs: `${currentOverNumber}.${nextLegalBalls}` };
       setBowler(updatedBowler);
@@ -1264,6 +1640,11 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   // WICKET WORKFLOW
   // -----------------------------------------------------------------------
   const handleConfirmWicket = () => {
+    if (isScoringLocked) {
+      Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
+      return;
+    }
+
     saveCurrentStateToHistory();
 
     const newWickets = totalWickets + 1;
@@ -1272,18 +1653,19 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     setTotalRuns(newRuns);
 
     const dismissedBatter =
-      selectedDismissal === 'Run Out' && selectedRunoutBatter.name === nonStriker.name
+      selectedDismissal === 'Run Out' && selectedRunoutBatter?.name === nonStriker.name
         ? nonStriker
         : striker;
 
-    setFallOfWickets((prev) => [
-      ...prev,
+    const newFallOfWickets = [
+      ...fallOfWickets,
       {
         wicket: newWickets,
         score: newRuns,
         batter: dismissedBatter.name,
       },
-    ]);
+    ];
+    setFallOfWickets(newFallOfWickets);
 
     // Track dismissed batters in Super Over for ICC repeat restrictions
     if (isSuperOver) {
@@ -1302,8 +1684,8 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         ? `st ${selectedFielder?.name || wicketkeeper?.name || 'Keeper'} b ${bowler.name}`
         : `${selectedDismissal}`;
 
-    setBattersScorecard((prev) =>
-      prev.map((b) => (b.id === dismissedBatter.id ? { ...b, status: 'out', dismissal: dismissalText } : b))
+    let updatedBattersScorecard = battersScorecard.map((b) =>
+      b.id === dismissedBatter.id ? { ...b, status: 'out', dismissal: dismissalText } : b
     );
 
     const isBowlerWicket = !['Run Out', 'Obstructing the Field', 'Timed Out', 'Retired Hurt', 'Retired Out'].includes(selectedDismissal);
@@ -1325,39 +1707,105 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     ]);
 
     let nextLegalBalls = legalBalls + 1;
+    const isOverEnd = nextLegalBalls >= 6;
+    const nextOverNum = isOverEnd ? currentOverNumber + 1 : currentOverNumber;
 
-    // Check if team is All Out (10 wickets in normal match, 2 wickets in Super Over)
-    if (newWickets >= activeMaxWickets) {
-      setCurrentScreen('MAIN');
-      checkDeliveryProgress(newRuns, newWickets, nextLegalBalls, currentOverNumber, nextLegalBalls >= 6);
+    // Filter available batters who haven't batted or been dismissed
+    const dismissedNames = newFallOfWickets.map((f) => f.batter);
+    const otherActiveBatterName = dismissedBatter.name === striker.name ? nonStriker.name : striker.name;
+    const availableBatters = currentBattingSquad.filter((p) => {
+      if (dismissedNames.includes(p.name)) return false;
+      if (p.name === dismissedBatter.name) return false;
+      if (p.name === otherActiveBatterName) return false;
+      if (isSuperOver && (dismissedSuperOverBatters || []).includes(p.name)) return false;
+      return true;
+    });
+
+    const isAllOut = newWickets >= activeMaxWickets || availableBatters.length === 0;
+
+    // Check target chase in 2nd innings
+    if (!isSuperOver && currentInnings === 2 && targetRuns && newRuns >= targetRuns) {
+      const marginWickets = activeMaxWickets - newWickets;
+      const finalOvers = isOverEnd ? `${nextOverNum}.0` : `${currentOverNumber}.${nextLegalBalls}`;
+      handleMatchComplete({
+        winner: firstInningsBowlingTeam,
+        margin: `${marginWickets} wicket${marginWickets === 1 ? '' : 's'}`,
+        resultText: `${firstInningsBowlingTeam} won by ${marginWickets} wicket${marginWickets === 1 ? '' : 's'}!`,
+        finalRuns: newRuns,
+        finalWickets: newWickets,
+        finalOversDecimal: finalOvers,
+        customBatters: updatedBattersScorecard,
+      });
+      setCurrentScreen('MATCH_RESULT');
       return;
     }
 
-    // Set new incoming batter
+    if (isAllOut) {
+      setCurrentScreen('MAIN');
+      if (isSuperOver) {
+        if (superOverInnings === 1) {
+          handleSuperOverInnings1End(newRuns, newWickets, isOverEnd ? `${nextOverNum}.0` : `${currentOverNumber}.${nextLegalBalls}`);
+        } else {
+          handleSuperOverInnings2End(newRuns, newWickets, isOverEnd ? `${nextOverNum}.0` : `${currentOverNumber}.${nextLegalBalls}`, superOverTarget && newRuns >= superOverTarget);
+        }
+        return;
+      }
+
+      if (currentInnings === 1) {
+        handleEndFirstInnings(newRuns, newWickets, isOverEnd ? `${nextOverNum}.0` : `${currentOverNumber}.${nextLegalBalls}`, updatedBattersScorecard);
+        return;
+      } else {
+        const finalOvers = isOverEnd ? `${nextOverNum}.0` : `${currentOverNumber}.${nextLegalBalls}`;
+        if (targetRuns && newRuns < targetRuns - 1) {
+          const marginRuns = targetRuns - 1 - newRuns;
+          handleMatchComplete({
+            winner: firstInningsBattingTeam,
+            margin: `${marginRuns} run${marginRuns === 1 ? '' : 's'}`,
+            resultText: `${firstInningsBattingTeam} won by ${marginRuns} run${marginRuns === 1 ? '' : 's'}!`,
+            finalRuns: newRuns,
+            finalWickets: newWickets,
+            finalOversDecimal: finalOvers,
+            customBatters: updatedBattersScorecard,
+          });
+        } else if (targetRuns && newRuns === targetRuns - 1) {
+          handleMatchTied(newRuns, newWickets, finalOvers);
+        }
+        return;
+      }
+    }
+
+    // Team NOT all out: select next batter safely
+    const incomingBatter = availableBatters.find((b) => b.id === selectedNextBatter?.id) || availableBatters[0];
     const newBatterObj = {
-      id: selectedNextBatter.id,
-      name: selectedNextBatter.name,
-      img: selectedNextBatter.img,
+      id: incomingBatter.id,
+      name: incomingBatter.name,
+      img: incomingBatter.img,
+      role: incomingBatter.role || 'Batter',
       runs: 0,
       balls: 0,
       fours: 0,
       sixes: 0,
     };
 
-    setBattersScorecard((prev) =>
-      prev.map((b) => (b.id === selectedNextBatter.id ? { ...b, status: 'not out' } : b))
+    updatedBattersScorecard = updatedBattersScorecard.map((b) =>
+      b.id === incomingBatter.id ? { ...b, status: 'not out', dismissal: 'batting' } : b
     );
+    setBattersScorecard(updatedBattersScorecard);
 
+    let activeStriker = striker;
+    let activeNonStriker = nonStriker;
     if (dismissedBatter.name === striker.name) {
+      activeStriker = newBatterObj;
       setStriker(newBatterObj);
     } else {
+      activeNonStriker = newBatterObj;
       setNonStriker(newBatterObj);
     }
 
-    if (nextLegalBalls >= 6) {
-      setStriker(nonStriker);
-      setNonStriker(newBatterObj);
-      completeOverAndPromptNextBowler(updatedBalls, updatedBowler);
+    if (isOverEnd) {
+      setStriker(activeNonStriker);
+      setNonStriker(activeStriker);
+      completeOverAndPromptNextBowler(updatedBalls, updatedBowler, newRuns, newWickets, updatedBattersScorecard);
     } else {
       setLegalBalls(nextLegalBalls);
       updatedBowler.overs = `${currentOverNumber}.${nextLegalBalls}`;
@@ -1374,7 +1822,16 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     <View className="flex-1 bg-[#0a0a0a]">
       {/* Top Header */}
       <View className="flex-row items-center justify-between px-4 py-3 border-b border-[#1f1f1f]">
-        <TouchableOpacity onPress={() => navigation.goBack()} className="p-1">
+        <TouchableOpacity
+          onPress={() => {
+            if (isScoringLocked && historyStack.length > 0) {
+              handleUndo();
+            } else {
+              navigation.goBack();
+            }
+          }}
+          className="p-1"
+        >
           <Feather name="arrow-left" size={22} color="#ffffff" />
         </TouchableOpacity>
         <View className="items-center">
@@ -1394,7 +1851,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 390 }}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 390 + bottomInset }}>
         {/* Match Header / Scoreboard Card */}
         <View className="bg-[#121212] rounded-2xl border border-[#222222] p-4 mb-3">
           <View className="flex-row items-center justify-between">
@@ -1612,162 +2069,219 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       </ScrollView>
 
       {/* Floating Bottom Scoring Keypad */}
-      <View className="absolute bottom-0 left-0 right-0 bg-[#0a0a0a] border-t border-[#1f1f1f] px-3 pt-2.5 pb-4">
-        {/* Row 1: Runs 0, 1, 2 */}
-        <View className="flex-row mb-2">
-          <TouchableOpacity
-            onPress={() => handleScoreRuns(0)}
-            className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] items-center justify-center active:bg-[#202020]"
-          >
-            <Text className="text-white text-lg font-bold">0</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => handleScoreRuns(1)}
-            className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] items-center justify-center active:bg-[#202020]"
-          >
-            <Text className="text-white text-lg font-bold">1</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => handleScoreRuns(2)}
-            className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] items-center justify-center active:bg-[#202020]"
-          >
-            <Text className="text-white text-lg font-bold">2</Text>
-          </TouchableOpacity>
-        </View>
+      {isScoringLocked ? (
+        <View
+          style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+          className="absolute bottom-0 left-0 right-0 bg-[#0a0a0a] border-t border-[#1f1f1f] px-4 pt-3"
+        >
+          <View className="bg-[#141414] border border-[#222222] rounded-xl p-3 mb-2 flex-row items-center justify-between">
+            <View className="flex-row items-center flex-1">
+              <View className="w-8 h-8 rounded-full bg-[#1e293b] items-center justify-center mr-2.5">
+                <Ionicons name="lock-closed" size={16} color="#38bdf8" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-white text-xs font-bold">
+                  {isSecondInningsCompleted || (isSuperOver && superOverInnings === 2)
+                    ? 'Match Concluded'
+                    : 'Innings Concluded'}
+                </Text>
+                <Text className="text-[#888888] text-[10px]">
+                  Scoring locked. Undo last ball to edit previous deliveries.
+                </Text>
+              </View>
+            </View>
+          </View>
 
-        {/* Row 2: Runs 3, 4, 6 */}
-        <View className="flex-row mb-2">
-          <TouchableOpacity
-            onPress={() => handleScoreRuns(3)}
-            className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] items-center justify-center active:bg-[#202020]"
-          >
-            <Text className="text-white text-lg font-bold">3</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => handleScoreRuns(4)}
-            className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] items-center justify-center active:bg-[#202020]"
-          >
-            <Text className="text-white text-lg font-bold">4</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => handleScoreRuns(6)}
-            className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] items-center justify-center active:bg-[#202020]"
-          >
-            <Text className="text-white text-lg font-bold">6</Text>
-          </TouchableOpacity>
-        </View>
+          <View className="flex-row mb-1">
+            <TouchableOpacity
+              onPress={handleUndo}
+              className="flex-1 py-3.5 mx-1 rounded-xl bg-[#1e1e1e] border border-[#333333] flex-row items-center justify-center active:bg-[#2a2a2a]"
+            >
+              <Ionicons name="arrow-undo-outline" size={16} color="#ffffff" />
+              <Text className="text-white text-xs font-bold tracking-wider ml-2">UNDO LAST BALL</Text>
+            </TouchableOpacity>
 
-        {/* Row 3: Extras (WIDE, NO BALL, BYE, LEG BYE) */}
-        <View className="flex-row mb-2">
-          <TouchableOpacity
-            onPress={() => setShowWideDrawer(true)}
-            className="flex-1 py-3 mx-1 rounded-xl bg-[#131d31] border border-[#1e3a5f] items-center justify-center active:bg-[#1a2942]"
-          >
-            <Text className="text-[#3b82f6] text-xs font-bold tracking-wider">WIDE</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setShowNoBallDrawer(true)}
-            className="flex-1 py-3 mx-1 rounded-xl bg-[#2a1315] border border-[#4c1d24] items-center justify-center active:bg-[#38181c]"
-          >
-            <Text className="text-[#f87171] text-xs font-bold tracking-wider">NO BALL</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setShowByeDrawer(true)}
-            className="flex-1 py-3 mx-1 rounded-xl bg-[#241c10] border border-[#453011] items-center justify-center active:bg-[#332615]"
-          >
-            <Text className="text-[#eab308] text-xs font-bold tracking-wider">BYE</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setShowLegByeDrawer(true)}
-            className="flex-1 py-3 mx-1 rounded-xl bg-[#0c2317] border border-[#144226] items-center justify-center active:bg-[#11311f]"
-          >
-            <Text className="text-[#22c55e] text-xs font-bold tracking-wider">LEG BYE</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                if (isSuperOver) {
+                  if (superOverInnings === 1) setCurrentScreen('SUPER_OVER_SETUP');
+                  else setCurrentScreen(matchTiedData ? 'SUPER_OVER_TIED' : 'MATCH_RESULT');
+                } else if (currentInnings === 1) {
+                  setCurrentScreen('INNINGS_SUMMARY');
+                } else {
+                  setCurrentScreen(matchTiedData ? 'MATCH_TIED' : 'MATCH_RESULT');
+                }
+              }}
+              className="flex-1 py-3.5 mx-1 rounded-xl bg-[#22c55e] flex-row items-center justify-center active:bg-[#1ea34d]"
+            >
+              <Text className="text-black text-xs font-black tracking-wider">
+                {currentInnings === 1 && !isSuperOver ? 'VIEW SUMMARY' : 'VIEW RESULT'}
+              </Text>
+              <Feather name="arrow-right" size={15} color="#000000" style={{ marginLeft: 6 }} />
+            </TouchableOpacity>
+          </View>
         </View>
+      ) : (
+        <View
+          style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+          className="absolute bottom-0 left-0 right-0 bg-[#0a0a0a] border-t border-[#1f1f1f] px-3 pt-2.5"
+        >
+          {/* Row 1: Runs 0, 1, 2 */}
+          <View className="flex-row mb-2">
+            <TouchableOpacity
+              onPress={() => handleScoreRuns(0)}
+              className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] items-center justify-center active:bg-[#202020]"
+            >
+              <Text className="text-white text-lg font-bold">0</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => handleScoreRuns(1)}
+              className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] items-center justify-center active:bg-[#202020]"
+            >
+              <Text className="text-white text-lg font-bold">1</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => handleScoreRuns(2)}
+              className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] items-center justify-center active:bg-[#202020]"
+            >
+              <Text className="text-white text-lg font-bold">2</Text>
+            </TouchableOpacity>
+          </View>
 
-        {/* Row 4: EXTRAS & WICKET */}
-        <View className="flex-row mb-2">
-          <TouchableOpacity
-            onPress={() => setShowExtrasDrawer(true)}
-            className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] flex-row items-center justify-center active:bg-[#202020]"
-          >
-            <Ionicons name="ellipsis-horizontal" size={16} color="#ffffff" />
-            <Text className="text-white text-xs font-bold tracking-wider ml-1.5">EXTRAS</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setCurrentScreen('WICKET_DISMISSAL')}
-            className="flex-1 py-3.5 mx-1 rounded-xl bg-[#1f0e10] border-2 border-[#ef4444] flex-row items-center justify-center active:bg-[#2b1316]"
-          >
-            <MaterialCommunityIcons name="cricket" size={16} color="#ef4444" />
-            <Text className="text-[#ef4444] text-xs font-bold tracking-wider ml-2">WICKET</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Row 2: Runs 3, 4, 6 */}
+          <View className="flex-row mb-2">
+            <TouchableOpacity
+              onPress={() => handleScoreRuns(3)}
+              className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] items-center justify-center active:bg-[#202020]"
+            >
+              <Text className="text-white text-lg font-bold">3</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => handleScoreRuns(4)}
+              className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] items-center justify-center active:bg-[#202020]"
+            >
+              <Text className="text-white text-lg font-bold">4</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => handleScoreRuns(6)}
+              className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] items-center justify-center active:bg-[#202020]"
+            >
+              <Text className="text-white text-lg font-bold">6</Text>
+            </TouchableOpacity>
+          </View>
 
-        {/* Row 5: UNDO & EDIT LAST BALL */}
-        <View className="flex-row mb-2">
-          <TouchableOpacity
-            onPress={handleUndo}
-            className="flex-1 py-3 mx-1 rounded-xl bg-[#141414] border border-[#222222] flex-row items-center justify-center active:bg-[#202020]"
-          >
-            <Ionicons name="arrow-undo-outline" size={15} color="#d4d4d8" />
-            <Text className="text-white text-xs font-bold tracking-wider ml-2">UNDO</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setShowEditLastBallModal(true)}
-            className="flex-1 py-3 mx-1 rounded-xl bg-[#141414] border border-[#222222] flex-row items-center justify-center active:bg-[#202020]"
-          >
-            <Feather name="edit-2" size={14} color="#d4d4d8" />
-            <Text className="text-white text-xs font-bold tracking-wider ml-2">EDIT LAST BALL</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Row 3: Extras (WIDE, NO BALL, BYE, LEG BYE) */}
+          <View className="flex-row mb-2">
+            <TouchableOpacity
+              onPress={() => setShowWideDrawer(true)}
+              className="flex-1 py-3 mx-1 rounded-xl bg-[#131d31] border border-[#1e3a5f] items-center justify-center active:bg-[#1a2942]"
+            >
+              <Text className="text-[#3b82f6] text-xs font-bold tracking-wider">WIDE</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowNoBallDrawer(true)}
+              className="flex-1 py-3 mx-1 rounded-xl bg-[#2a1315] border border-[#4c1d24] items-center justify-center active:bg-[#38181c]"
+            >
+              <Text className="text-[#f87171] text-xs font-bold tracking-wider">NO BALL</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowByeDrawer(true)}
+              className="flex-1 py-3 mx-1 rounded-xl bg-[#241c10] border border-[#453011] items-center justify-center active:bg-[#332615]"
+            >
+              <Text className="text-[#eab308] text-xs font-bold tracking-wider">BYE</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowLegByeDrawer(true)}
+              className="flex-1 py-3 mx-1 rounded-xl bg-[#0c2317] border border-[#144226] items-center justify-center active:bg-[#11311f]"
+            >
+              <Text className="text-[#22c55e] text-xs font-bold tracking-wider">LEG BYE</Text>
+            </TouchableOpacity>
+          </View>
 
-        {/* Row 6: END OVER & END INNINGS */}
-        <View className="flex-row mb-1">
-          <TouchableOpacity
-            onPress={() => {
-              Alert.alert(
-                'End Over',
-                'Are you sure you want to end this over now?',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'End Over',
-                    onPress: () => completeOverAndPromptNextBowler(currentOverBalls, bowler),
-                  },
-                ]
-              );
-            }}
-            className="flex-1 py-3.5 mx-1 rounded-xl bg-[#22c55e] items-center justify-center active:bg-[#1ea34d]"
-          >
-            <Text className="text-black text-xs font-black tracking-wider">END OVER</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => {
-              Alert.alert(
-                'End Innings',
-                'Are you sure you want to end this innings now?',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'End Innings',
-                    style: 'destructive',
-                    onPress: () => {
-                      if (currentInnings === 1) {
-                        handleEndFirstInnings(totalRuns, totalWickets, `${currentOverNumber}.${legalBalls}`);
-                      } else {
-                        checkDeliveryProgress(totalRuns, totalWickets, legalBalls, currentOverNumber, true);
-                      }
+          {/* Row 4: EXTRAS & WICKET */}
+          <View className="flex-row mb-2">
+            <TouchableOpacity
+              onPress={() => setShowExtrasDrawer(true)}
+              className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] flex-row items-center justify-center active:bg-[#202020]"
+            >
+              <Ionicons name="ellipsis-horizontal" size={16} color="#ffffff" />
+              <Text className="text-white text-xs font-bold tracking-wider ml-1.5">EXTRAS</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setCurrentScreen('WICKET_DISMISSAL')}
+              className="flex-1 py-3.5 mx-1 rounded-xl bg-[#1f0e10] border-2 border-[#ef4444] flex-row items-center justify-center active:bg-[#2b1316]"
+            >
+              <MaterialCommunityIcons name="cricket" size={16} color="#ef4444" />
+              <Text className="text-[#ef4444] text-xs font-bold tracking-wider ml-2">WICKET</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Row 5: UNDO & EDIT LAST BALL */}
+          <View className="flex-row mb-2">
+            <TouchableOpacity
+              onPress={handleUndo}
+              className="flex-1 py-3 mx-1 rounded-xl bg-[#141414] border border-[#222222] flex-row items-center justify-center active:bg-[#202020]"
+            >
+              <Ionicons name="arrow-undo-outline" size={15} color="#d4d4d8" />
+              <Text className="text-white text-xs font-bold tracking-wider ml-2">UNDO</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowEditLastBallModal(true)}
+              className="flex-1 py-3 mx-1 rounded-xl bg-[#141414] border border-[#222222] flex-row items-center justify-center active:bg-[#202020]"
+            >
+              <Feather name="edit-2" size={14} color="#d4d4d8" />
+              <Text className="text-white text-xs font-bold tracking-wider ml-2">EDIT LAST BALL</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Row 6: END OVER & END INNINGS */}
+          <View className="flex-row mb-1">
+            <TouchableOpacity
+              onPress={() => {
+                Alert.alert(
+                  'End Over',
+                  'Are you sure you want to end this over now?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'End Over',
+                      onPress: () => completeOverAndPromptNextBowler(currentOverBalls, bowler),
                     },
-                  },
-                ]
-              );
-            }}
-            className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] items-center justify-center active:bg-[#202020]"
-          >
-            <Text className="text-white text-xs font-bold tracking-wider">END INNINGS</Text>
-          </TouchableOpacity>
+                  ]
+                );
+              }}
+              className="flex-1 py-3.5 mx-1 rounded-xl bg-[#22c55e] items-center justify-center active:bg-[#1ea34d]"
+            >
+              <Text className="text-black text-xs font-black tracking-wider">END OVER</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                Alert.alert(
+                  'End Innings',
+                  'Are you sure you want to end this innings now?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'End Innings',
+                      style: 'destructive',
+                      onPress: () => {
+                        if (currentInnings === 1) {
+                          handleEndFirstInnings(totalRuns, totalWickets, `${currentOverNumber}.${legalBalls}`);
+                        } else {
+                          checkDeliveryProgress(totalRuns, totalWickets, legalBalls, currentOverNumber, true);
+                        }
+                      },
+                    },
+                  ]
+                );
+              }}
+              className="flex-1 py-3.5 mx-1 rounded-xl bg-[#141414] border border-[#222222] items-center justify-center active:bg-[#202020]"
+            >
+              <Text className="text-white text-xs font-bold tracking-wider">END INNINGS</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      )}
     </View>
   );
 
@@ -1784,7 +2298,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         <View className="w-6" />
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 }}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 + bottomInset }}>
         {/* Extras Summary Card */}
         <View className="bg-[#121212] rounded-2xl border border-[#222222] p-4 mb-4">
           <Text className="text-[#888888] text-xs font-bold uppercase tracking-wider mb-2">
@@ -1823,7 +2337,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         ))}
       </ScrollView>
 
-      <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
+      <View
+        style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+        className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]"
+      >
         <TouchableOpacity
           onPress={() => setCurrentScreen('MAIN')}
           className="bg-[#23c55e] py-3.5 rounded-xl items-center"
@@ -1917,7 +2434,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           <Text className="text-white text-base font-bold ml-4">Select Dismissal</Text>
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 }}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 + bottomInset }}>
           {dismissals.map((item) => (
             <TouchableOpacity
               key={item.id}
@@ -1941,7 +2458,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           ))}
         </ScrollView>
 
-        <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
+        <View
+          style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+          className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]"
+        >
           <TouchableOpacity
             onPress={() => setCurrentScreen('MAIN')}
             className="bg-[#181818] border border-[#2c2c2c] py-4 rounded-xl items-center"
@@ -1970,7 +2490,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           <Text className="text-white text-base font-bold ml-4">Caught by</Text>
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 }}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 + bottomInset }}>
           <View className="bg-[#141414] border border-[#262626] rounded-xl flex-row items-center px-3.5 py-3 mb-4">
             <Feather name="search" size={16} color="#888888" style={{ marginRight: 10 }} />
             <TextInput
@@ -2002,7 +2522,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           })}
         </ScrollView>
 
-        <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
+        <View
+          style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+          className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]"
+        >
           <TouchableOpacity
             onPress={() => setCurrentScreen('WICKET_CONFIRM')}
             className="bg-[#23c55e] py-4 rounded-xl items-center"
@@ -2025,7 +2548,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         </TouchableOpacity>
         <Text className="text-white text-base font-bold ml-4">Who was Run Out?</Text>
       </View>
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 + bottomInset }}>
         <TouchableOpacity
           onPress={() => setSelectedRunoutBatter(striker)}
           className={`p-4 rounded-xl border mb-3 flex-row items-center justify-between ${
@@ -2051,7 +2574,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           {selectedRunoutBatter.name === nonStriker.name && <Feather name="check" size={18} color="#23c55e" />}
         </TouchableOpacity>
       </ScrollView>
-      <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
+      <View
+        style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+        className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]"
+      >
         <TouchableOpacity
           onPress={() => setCurrentScreen('RUNOUT_FIELDER')}
           className="bg-[#23c55e] py-4 rounded-xl items-center"
@@ -2079,7 +2605,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           <Text className="text-white text-base font-bold ml-4">Run Out by</Text>
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 }}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 + bottomInset }}>
           {filteredFielders.map((p) => {
             const isSelected = selectedFielder?.id === p.id;
             return (
@@ -2100,7 +2626,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           })}
         </ScrollView>
 
-        <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
+        <View
+          style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+          className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]"
+        >
           <TouchableOpacity
             onPress={() => setCurrentScreen('WICKET_CONFIRM')}
             className="bg-[#23c55e] py-4 rounded-xl items-center"
@@ -2123,7 +2652,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         </TouchableOpacity>
         <Text className="text-white text-base font-bold ml-4">Wicketkeeper</Text>
       </View>
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 + bottomInset }}>
         {currentBowlingSquad.map((p) => {
           const isSelected = selectedFielder?.id === p.id;
           return (
@@ -2146,7 +2675,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           );
         })}
       </ScrollView>
-      <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
+      <View
+        style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+        className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]"
+      >
         <TouchableOpacity
           onPress={() => setCurrentScreen('WICKET_CONFIRM')}
           className="bg-[#23c55e] py-4 rounded-xl items-center"
@@ -2162,18 +2694,19 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   // =========================================================================
   const renderWicketConfirmScreen = () => {
     const dismissedBatter =
-      selectedDismissal === 'Run Out' && selectedRunoutBatter.name === nonStriker.name
+      selectedDismissal === 'Run Out' && selectedRunoutBatter?.name === nonStriker.name
         ? nonStriker
         : striker;
 
     // Filter available batters who haven't batted or been dismissed
     const dismissedNames = fallOfWickets.map((f) => f.batter);
+    const otherActiveBatterName = dismissedBatter.name === striker.name ? nonStriker.name : striker.name;
     const availableBatters = currentBattingSquad.filter((p) => {
       if (dismissedNames.includes(p.name)) return false;
       if (p.name === dismissedBatter.name) return false;
-      if (p.name === (dismissedBatter.name === striker.name ? nonStriker.name : striker.name)) return false;
+      if (p.name === otherActiveBatterName) return false;
       // In Super Over: ICC rule - batter dismissed in any previous Super Over cannot bat
-      if (isSuperOver && dismissedSuperOverBatters.includes(p.name)) return false;
+      if (isSuperOver && (dismissedSuperOverBatters || []).includes(p.name)) return false;
       return true;
     });
 
@@ -2186,7 +2719,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           <Text className="text-white text-base font-bold ml-4">Wicket Confirmation</Text>
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 140 }}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 140 + bottomInset }}>
           <View className="bg-[#121212] rounded-2xl border border-[#222222] p-4 mb-4">
             <View className="flex-row justify-between py-2.5 border-b border-[#222222]">
               <Text className="text-[#888888] text-xs">Batter Out</Text>
@@ -2248,7 +2781,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           )}
         </ScrollView>
 
-        <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
+        <View
+          style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+          className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]"
+        >
           <TouchableOpacity
             onPress={handleConfirmWicket}
             className="bg-[#23c55e] py-4 rounded-xl items-center mb-2.5"
@@ -2378,7 +2914,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           <View className="w-6" />
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 }}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 + bottomInset }}>
           {/* Big Summary Card */}
           <View className="bg-[#121212] rounded-2xl border border-[#222222] p-5 mb-4">
             <Text className="text-[#23c55e] text-xs font-bold uppercase mb-1">
@@ -2455,7 +2991,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           </View>
         </ScrollView>
 
-        <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
+        <View
+          style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+          className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]"
+        >
           <TouchableOpacity
             onPress={() => {
               // Ensure defaults are populated fresh from the switched squads
@@ -2686,7 +3225,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           </TouchableOpacity>
         </ScrollView>
 
-        <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
+        <View
+          style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+          className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]"
+        >
           <TouchableOpacity
             onPress={() => {
               // Validations
@@ -2806,7 +3348,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           <Text className="text-white text-base font-bold ml-4">Match Tied</Text>
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: 120, alignItems: 'center' }}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: 120 + bottomInset, alignItems: 'center' }}>
           {/* Badge */}
           <View className="w-20 h-20 rounded-full bg-[#eab308]/15 border-2 border-[#eab308] items-center justify-center mb-4">
             <Ionicons name="git-compare" size={36} color="#eab308" />
@@ -2851,7 +3393,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           </View>
         </ScrollView>
 
-        <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
+        <View
+          style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+          className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]"
+        >
           <TouchableOpacity
             onPress={() => startSuperOverFlow(1)}
             className="bg-[#23c55e] py-4 rounded-xl items-center"
@@ -3096,7 +3641,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           </TouchableOpacity>
         </ScrollView>
 
-        <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
+        <View
+          style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+          className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]"
+        >
           <TouchableOpacity
             onPress={() => {
               if (!setupStrikerSO || !setupNonStrikerSO) {
@@ -3220,7 +3768,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           <Text className="text-white text-base font-bold ml-4">Super Over Tied</Text>
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: 120, alignItems: 'center' }}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: 120 + bottomInset, alignItems: 'center' }}>
           <View className="w-20 h-20 rounded-full bg-[#ef4444]/15 border-2 border-[#ef4444] items-center justify-center mb-4">
             <Ionicons name="repeat" size={36} color="#ef4444" />
           </View>
@@ -3270,7 +3818,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           </View>
         </ScrollView>
 
-        <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
+        <View
+          style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+          className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]"
+        >
           <TouchableOpacity
             onPress={() => startSuperOverFlow(nextSO)}
             className="bg-[#23c55e] py-4 rounded-xl items-center"
@@ -3321,14 +3872,14 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     return (
       <View className="flex-1 bg-[#0a0a0a]">
         <View className="flex-row items-center justify-between px-4 py-3 border-b border-[#1f1f1f]">
-          <TouchableOpacity onPress={() => navigation.navigate('MainTabs', { screen: 'Matches' })} className="p-1">
+          <TouchableOpacity onPress={() => setCurrentScreen('MAIN')} className="p-1">
             <Feather name="arrow-left" size={22} color="#ffffff" />
           </TouchableOpacity>
           <Text className="text-white text-base font-bold">Match Result</Text>
           <View className="w-6" />
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 110 }}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 110 + bottomInset }}>
           {/* Winner Banner Card */}
           <View className="bg-[#121212] rounded-2xl border border-[#23c55e]/50 p-6 items-center mb-5">
             <View className="w-16 h-16 rounded-full bg-[#23c55e]/15 border-2 border-[#23c55e] items-center justify-center mb-3">
@@ -3474,7 +4025,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           </View>
         </ScrollView>
 
-        <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f] flex-row justify-between">
+        <View
+          style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+          className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f] flex-row justify-between"
+        >
           <TouchableOpacity
             onPress={() => navigation.navigate('MainTabs', { screen: 'Matches' })}
             className="w-[48%] py-3.5 rounded-xl bg-[#181818] border border-[#2a2a2a] items-center"
@@ -3498,7 +4052,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const renderSettingsModal = () => (
     <Modal visible={showSettingsModal} transparent animationType="slide">
       <View className="flex-1 bg-black/75 justify-end">
-        <View className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5">
+        <View style={{ paddingBottom: Math.max(20, bottomInset + 12) }} className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5">
           <View className="flex-row justify-between items-center pb-3 border-b border-[#222222] mb-3">
             <Text className="text-white text-base font-bold">Match Settings</Text>
             <TouchableOpacity onPress={() => setShowSettingsModal(false)}>
@@ -3586,7 +4140,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const renderBowlerSelectDrawer = () => (
     <Modal visible={showBowlerSelectDrawer} transparent animationType="slide">
       <View className="flex-1 bg-black/75 justify-end">
-        <View className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5 max-h-[75%]">
+        <View style={{ paddingBottom: Math.max(20, bottomInset + 12) }} className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5 max-h-[75%]">
           <Text className="text-white text-base font-bold mb-1">Over Completed</Text>
           <Text className="text-[#888888] text-xs mb-4">
             Select the next bowler ({currentBowlingTeam}). Note: Bowler cannot bowl consecutive overs.
@@ -3646,7 +4200,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const renderNoBallDrawer = () => (
     <Modal visible={showNoBallDrawer} transparent animationType="slide">
       <View className="flex-1 bg-black/75 justify-end">
-        <View className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5">
+        <View style={{ paddingBottom: Math.max(20, bottomInset + 12) }} className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5">
           <View className="flex-row justify-between items-center pb-3 border-b border-[#222222] mb-3">
             <View>
               <Text className="text-[#f59e0b] text-base font-bold">NO BALL DELIVERY</Text>
@@ -3771,7 +4325,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const renderWideDrawer = () => (
     <Modal visible={showWideDrawer} transparent animationType="slide">
       <View className="flex-1 bg-black/75 justify-end">
-        <View className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5">
+        <View style={{ paddingBottom: Math.max(20, bottomInset + 12) }} className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5">
           <View className="flex-row justify-between items-center pb-3 border-b border-[#222222] mb-3">
             <View>
               <Text className="text-[#3b82f6] text-base font-bold">WIDE DELIVERY</Text>
@@ -3804,7 +4358,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const renderByeDrawer = () => (
     <Modal visible={showByeDrawer} transparent animationType="slide">
       <View className="flex-1 bg-black/75 justify-end">
-        <View className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5">
+        <View style={{ paddingBottom: Math.max(20, bottomInset + 12) }} className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5">
           <View className="flex-row justify-between items-center pb-3 border-b border-[#222222] mb-3">
             <View>
               <Text className="text-[#8b5cf6] text-base font-bold">BYE RUNS</Text>
@@ -3836,7 +4390,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const renderLegByeDrawer = () => (
     <Modal visible={showLegByeDrawer} transparent animationType="slide">
       <View className="flex-1 bg-black/75 justify-end">
-        <View className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5">
+        <View style={{ paddingBottom: Math.max(20, bottomInset + 12) }} className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5">
           <View className="flex-row justify-between items-center pb-3 border-b border-[#222222] mb-3">
             <View>
               <Text className="text-[#a855f7] text-base font-bold">LEG BYE RUNS</Text>
@@ -3868,7 +4422,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const renderExtrasDrawer = () => (
     <Modal visible={showExtrasDrawer} transparent animationType="slide">
       <View className="flex-1 bg-black/75 justify-end">
-        <View className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5">
+        <View style={{ paddingBottom: Math.max(20, bottomInset + 12) }} className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5">
           <View className="flex-row justify-between items-center pb-3 border-b border-[#222222] mb-3">
             <Text className="text-white text-base font-bold">Select Extras</Text>
             <TouchableOpacity onPress={() => setShowExtrasDrawer(false)}>
@@ -3930,7 +4484,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     return (
       <Modal visible={!!pickerConfig} transparent animationType="slide">
         <View className="flex-1 bg-black/75 justify-end">
-          <View className="bg-[#121212] border-t border-[#222222] rounded-t-3xl max-h-[75%] p-5">
+          <View style={{ paddingBottom: Math.max(20, bottomInset + 12) }} className="bg-[#121212] border-t border-[#222222] rounded-t-3xl max-h-[75%] p-5">
             <View className="flex-row justify-between items-center mb-4 pb-3 border-b border-[#222222]">
               <View>
                 <Text className="text-white text-lg font-bold">{pickerConfig.title}</Text>
