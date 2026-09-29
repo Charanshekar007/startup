@@ -276,20 +276,18 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     ? 2
     : (currentBattingSquad?.length >= 2 ? Math.min(10, currentBattingSquad.length - 1) : 10);
   const oversDecimal = `${currentOverNumber}.${legalBalls}`;
-  const totalBallsRemaining = isSuperOver
-    ? Math.max(0, 6 - legalBalls)
-    : Math.max(0, totalOversMax * 6 - (currentOverNumber * 6 + legalBalls));
+  const totalBallsRemaining = Math.max(0, (isSuperOver ? 1 : totalOversMax) * 6 - (currentOverNumber * 6 + legalBalls));
   const runsNeeded = isSuperOver
     ? (superOverTarget ? Math.max(0, superOverTarget - totalRuns) : 0)
     : (targetRuns ? Math.max(0, targetRuns - totalRuns) : 0);
 
-  const isInnings1Completed = currentInnings === 1 && (
+  const isInnings1Completed = !isSuperOver && currentInnings === 1 && (
     firstInningsSummary !== null ||
     currentOverNumber >= totalOversMax ||
     totalWickets >= activeMaxWickets
   );
 
-  const isSecondInningsCompleted = currentInnings === 2 && (
+  const isSecondInningsCompleted = !isSuperOver && currentInnings === 2 && (
     matchResult !== null ||
     matchTiedData !== null ||
     (targetRuns && totalRuns >= targetRuns) ||
@@ -298,11 +296,18 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   );
 
   const isSuperOverCompleted = isSuperOver && (
-    (superOverInnings === 1 && superOverInnings1Summary !== null) ||
-    (superOverInnings === 2 && matchResult !== null) ||
-    currentOverNumber >= 1 ||
-    totalWickets >= 2 ||
-    (superOverInnings === 2 && superOverTarget && totalRuns >= superOverTarget)
+    (superOverInnings === 1 && (
+      superOverInnings1Summary !== null ||
+      currentOverNumber >= 1 ||
+      totalWickets >= 2
+    )) ||
+    (superOverInnings === 2 && (
+      matchResult !== null ||
+      tiedSuperOverData !== null ||
+      (superOverTarget && totalRuns >= superOverTarget) ||
+      currentOverNumber >= 1 ||
+      totalWickets >= 2
+    ))
   );
 
   const isScoringLocked = isInnings1Completed || isSecondInningsCompleted || isSuperOverCompleted;
@@ -339,9 +344,14 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         commentaryList: [...commentaryList],
         showBowlerSelectDrawer,
         firstInningsSummary: firstInningsSummary ? JSON.parse(JSON.stringify(firstInningsSummary)) : null,
+        superOverInnings1Summary: superOverInnings1Summary ? JSON.parse(JSON.stringify(superOverInnings1Summary)) : null,
         matchResult: matchResult ? JSON.parse(JSON.stringify(matchResult)) : null,
         matchTiedData: matchTiedData ? JSON.parse(JSON.stringify(matchTiedData)) : null,
+        tiedSuperOverData: tiedSuperOverData ? JSON.parse(JSON.stringify(tiedSuperOverData)) : null,
         secondInningsSummary: secondInningsSummary ? JSON.parse(JSON.stringify(secondInningsSummary)) : null,
+        superOvers: JSON.parse(JSON.stringify(superOvers)),
+        dismissedSuperOverBatters: JSON.parse(JSON.stringify(dismissedSuperOverBatters)),
+        previousSuperOverBowlers: JSON.parse(JSON.stringify(previousSuperOverBowlers)),
         targetRuns,
         currentInnings,
       },
@@ -384,9 +394,24 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     setShowBowlerSelectDrawer(previousState.showBowlerSelectDrawer);
 
     setFirstInningsSummary(previousState.firstInningsSummary || null);
+    if (previousState.superOverInnings1Summary !== undefined) {
+      setSuperOverInnings1Summary(previousState.superOverInnings1Summary);
+    }
     setMatchResult(previousState.matchResult || null);
     setMatchTiedData(previousState.matchTiedData || null);
+    if (previousState.tiedSuperOverData !== undefined) {
+      setTiedSuperOverData(previousState.tiedSuperOverData);
+    }
     setSecondInningsSummary(previousState.secondInningsSummary || null);
+    if (previousState.superOvers !== undefined) {
+      setSuperOvers(previousState.superOvers);
+    }
+    if (previousState.dismissedSuperOverBatters !== undefined) {
+      setDismissedSuperOverBatters(previousState.dismissedSuperOverBatters);
+    }
+    if (previousState.previousSuperOverBowlers !== undefined) {
+      setPreviousSuperOverBowlers(previousState.previousSuperOverBowlers);
+    }
     if (previousState.targetRuns !== undefined) setTargetRuns(previousState.targetRuns);
     if (previousState.currentInnings !== undefined) setCurrentInnings(previousState.currentInnings);
 
@@ -494,13 +519,14 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   };
 
   const handleSuperOverInnings1End = (finalRuns, finalWickets, finalOversDecimal) => {
+    const finalLegalBalls = finalOversDecimal === '1.0' ? 6 : (parseInt(String(finalOversDecimal).split('.')[1], 10) || legalBalls);
     const summary = {
       battingTeam: superOverBattingTeam,
       bowlingTeam: superOverBowlingTeam,
       totalRuns: finalRuns,
       totalWickets: finalWickets,
       overs: finalOversDecimal,
-      legalBalls: Math.min(6, finalOversDecimal === '1.0' ? 6 : legalBalls),
+      legalBalls: Math.min(6, finalLegalBalls),
       extrasTotal,
       extrasBreakdown: { ...extrasBreakdown },
       batters: [...battersScorecard],
@@ -529,7 +555,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     const dismissedBatters = dismissedSuperOverBatters[nextBattingTeam] || [];
     const prevBowlerId = previousSuperOverBowlers[nextBowlingTeam];
 
-    const eligibleBatters = nextBattingSquad.filter((p) => !dismissedBatters.includes(p.id));
+    const eligibleBatters = nextBattingSquad.filter((p) => !dismissedBatters.includes(p.id) && !dismissedBatters.includes(p.name));
     const eligibleBowlers = nextBowlingSquad.filter((p) => p.id !== prevBowlerId);
 
     setSetupStrikerSO(eligibleBatters[0] || nextBattingSquad[0]);
@@ -542,13 +568,14 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
   const handleSuperOverInnings2End = (finalRuns, finalWickets, finalOversDecimal, isTargetReached) => {
     const inn1 = superOverInnings1Summary;
+    const finalLegalBalls = finalOversDecimal === '1.0' ? 6 : (parseInt(String(finalOversDecimal).split('.')[1], 10) || legalBalls);
     const inn2 = {
       battingTeam: superOverBattingTeam,
       bowlingTeam: superOverBowlingTeam,
       totalRuns: finalRuns,
       totalWickets: finalWickets,
       overs: finalOversDecimal,
-      legalBalls: Math.min(6, finalOversDecimal === '1.0' ? 6 : legalBalls),
+      legalBalls: Math.min(6, finalLegalBalls),
       target: superOverTarget,
       extrasTotal,
       extrasBreakdown: { ...extrasBreakdown },
@@ -563,10 +590,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     let winner = null;
     let isTied = false;
 
-    if (isTargetReached || finalRuns > inn1.totalRuns) {
+    if (isTargetReached || finalRuns > (inn1?.totalRuns ?? 0)) {
       winner = superOverBattingTeam;
-    } else if (finalRuns < inn1.totalRuns) {
-      winner = inn1.battingTeam;
+    } else if (finalRuns < (inn1?.totalRuns ?? 0)) {
+      winner = inn1?.battingTeam || superOverBowlingTeam;
     } else {
       isTied = true;
     }
@@ -584,12 +611,12 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     // Track dismissed batters and bowlers across Super Overs for ICC rules
     const newDismissedBatters = { ...dismissedSuperOverBatters };
-    const inn1DismissedIds = inn1.batters.filter((b) => b.status === 'out').map((b) => b.id);
-    newDismissedBatters[inn1.battingTeam] = [
-      ...(newDismissedBatters[inn1.battingTeam] || []),
+    const inn1DismissedIds = inn1 ? inn1.batters.filter((b) => b.status === 'out').map((b) => b.id || b.name) : [];
+    newDismissedBatters[inn1?.battingTeam || superOverBowlingTeam] = [
+      ...(newDismissedBatters[inn1?.battingTeam || superOverBowlingTeam] || []),
       ...inn1DismissedIds,
     ];
-    const inn2DismissedIds = inn2.batters.filter((b) => b.status === 'out').map((b) => b.id);
+    const inn2DismissedIds = inn2.batters.filter((b) => b.status === 'out').map((b) => b.id || b.name);
     newDismissedBatters[inn2.battingTeam] = [
       ...(newDismissedBatters[inn2.battingTeam] || []),
       ...inn2DismissedIds,
@@ -597,16 +624,18 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     setDismissedSuperOverBatters(newDismissedBatters);
 
     const newPrevBowlers = { ...previousSuperOverBowlers };
-    if (inn1.bowler?.id) newPrevBowlers[inn1.bowlingTeam] = inn1.bowler.id;
-    if (inn2.bowler?.id) newPrevBowlers[inn2.bowlingTeam] = inn2.bowler.id;
+    if (inn1?.bowler?.id) newPrevBowlers[inn1.bowlingTeam] = inn1.bowler.id;
+    if (inn2?.bowler?.id) newPrevBowlers[inn2.bowlingTeam] = inn2.bowler.id;
     setPreviousSuperOverBowlers(newPrevBowlers);
 
     if (isTied) {
       setTiedSuperOverData({
-        soNumber: superOverNumber,
-        team1: inn1.battingTeam,
-        team1Runs: inn1.totalRuns,
-        team1Wickets: inn1.totalWickets,
+        superOverNumber,
+        innings1: inn1,
+        innings2: inn2,
+        team1: inn1?.battingTeam || superOverBowlingTeam,
+        team1Runs: inn1?.totalRuns ?? 0,
+        team1Wickets: inn1?.totalWickets ?? 0,
         team2: inn2.battingTeam,
         team2Runs: inn2.totalRuns,
         team2Wickets: inn2.totalWickets,
@@ -642,6 +671,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     setSuperOverBowlingTeam(team1Bowling);
     setSuperOverTarget(null);
     setSuperOverInnings1Summary(null);
+    setMatchResult(null);
+    setMatchTiedData(null);
+    setTiedSuperOverData(null);
+    setTargetRuns(null);
 
     const battingSquad = team1Batting === teamA ? playingXI_A : playingXI_B;
     const bowlingSquad = team1Bowling === teamA ? playingXI_A : playingXI_B;
@@ -649,7 +682,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     const dismissedBatters = dismissedSuperOverBatters[team1Batting] || [];
     const prevBowlerId = previousSuperOverBowlers[team1Bowling];
 
-    const eligibleBatters = battingSquad.filter((p) => !dismissedBatters.includes(p.id));
+    const eligibleBatters = battingSquad.filter((p) => !dismissedBatters.includes(p.id) && !dismissedBatters.includes(p.name));
     const eligibleBowlers = bowlingSquad.filter((p) => p.id !== prevBowlerId);
 
     setSetupStrikerSO(eligibleBatters[0] || battingSquad[0]);
@@ -1002,9 +1035,21 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       }
     }
 
-    // Check target chase in 2nd innings or Super Over chasing innings
-    if ((isSuperOver && superOverInnings === 2 && superOverTarget && newRuns >= superOverTarget) ||
-        (!isSuperOver && currentInnings === 2 && targetRuns && newRuns >= targetRuns)) {
+    // Check target chase in Super Over chasing innings
+    if (isSuperOver && superOverInnings === 2 && superOverTarget && newRuns >= superOverTarget) {
+      if (isOverEnd) {
+        completeOverAndPromptNextBowler(updatedBalls, updatedBowler, newRuns, totalWickets, updatedBattersScorecard);
+      } else {
+        setLegalBalls(nextLegalBalls);
+        updatedBowler.overs = `${currentOverNumber}.${nextLegalBalls}`;
+        setBowler(updatedBowler);
+        handleSuperOverInnings2End(newRuns, totalWickets, `${currentOverNumber}.${nextLegalBalls}`, true);
+      }
+      return;
+    }
+
+    // Check target chase in normal 2nd innings
+    if (!isSuperOver && currentInnings === 2 && targetRuns && newRuns >= targetRuns) {
       if (isOverEnd) {
         completeOverAndPromptNextBowler(updatedBalls, updatedBowler, newRuns, totalWickets, updatedBattersScorecard);
       } else {
@@ -1110,8 +1155,12 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     setShowNoBallDrawer(false);
 
-    if ((isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) ||
-        (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns)) {
+    if (isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) {
+      handleSuperOverInnings2End(newTotal, totalWickets, `${currentOverNumber}.${legalBalls}`, true);
+      return;
+    }
+
+    if (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns) {
       const marginWickets = activeMaxWickets - totalWickets;
       handleMatchComplete({
         winner: firstInningsBowlingTeam,
@@ -1182,8 +1231,12 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     setShowNoBallDrawer(false);
     setNoBallSubStep('MAIN');
 
-    if ((isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) ||
-        (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns)) {
+    if (isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) {
+      handleSuperOverInnings2End(newTotal, totalWickets, `${currentOverNumber}.${legalBalls}`, true);
+      return;
+    }
+
+    if (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns) {
       const marginWickets = activeMaxWickets - totalWickets;
       handleMatchComplete({
         winner: firstInningsBowlingTeam,
@@ -1254,8 +1307,12 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     setShowNoBallDrawer(false);
     setNoBallSubStep('MAIN');
 
-    if ((isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) ||
-        (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns)) {
+    if (isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) {
+      handleSuperOverInnings2End(newTotal, totalWickets, `${currentOverNumber}.${legalBalls}`, true);
+      return;
+    }
+
+    if (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns) {
       const marginWickets = activeMaxWickets - totalWickets;
       handleMatchComplete({
         winner: firstInningsBowlingTeam,
@@ -1314,6 +1371,12 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     setShowNoBallDrawer(false);
     setNoBallSubStep('MAIN');
 
+    // Check target chase in Super Over chasing innings
+    if (isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) {
+      handleSuperOverInnings2End(newTotal, newWickets, `${currentOverNumber}.${legalBalls}`, true);
+      return;
+    }
+
     // Check target chase in 2nd innings
     if (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns) {
       const marginWickets = activeMaxWickets - newWickets;
@@ -1331,13 +1394,26 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     const dismissedNames = newFallOfWickets.map((f) => f.batter);
     const otherActiveBatterName = noBallRunOutBatter === 'striker' ? nonStriker.name : striker.name;
-    const remainingBatters = currentBattingSquad.filter(
-      (p) => !dismissedNames.includes(p.name) && p.name !== otherActiveBatterName
-    );
+    const teamDismissed = (dismissedSuperOverBatters && dismissedSuperOverBatters[currentBattingTeam]) || [];
+    const remainingBatters = currentBattingSquad.filter((p) => {
+      if (dismissedNames.includes(p.name)) return false;
+      if (p.name === otherActiveBatterName) return false;
+      if (isSuperOver && (teamDismissed.includes(p.id) || teamDismissed.includes(p.name))) return false;
+      return true;
+    });
 
     const isAllOut = newWickets >= activeMaxWickets || remainingBatters.length === 0;
 
     if (isAllOut) {
+      if (isSuperOver) {
+        if (superOverInnings === 1) {
+          handleSuperOverInnings1End(newTotal, newWickets, `${currentOverNumber}.${legalBalls}`);
+        } else {
+          handleSuperOverInnings2End(newTotal, newWickets, `${currentOverNumber}.${legalBalls}`, superOverTarget && newTotal >= superOverTarget);
+        }
+        return;
+      }
+
       if (currentInnings === 1) {
         handleEndFirstInnings(newTotal, newWickets, `${currentOverNumber}.${legalBalls}`, updatedBattersScorecard);
       } else {
@@ -1419,8 +1495,12 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     setShowWideDrawer(false);
 
-    if ((isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) ||
-        (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns)) {
+    if (isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) {
+      handleSuperOverInnings2End(newTotal, totalWickets, `${currentOverNumber}.${legalBalls}`, true);
+      return;
+    }
+
+    if (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns) {
       const marginWickets = activeMaxWickets - totalWickets;
       handleMatchComplete({
         winner: firstInningsBowlingTeam,
@@ -1504,8 +1584,19 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     setStriker(nextStriker);
     setNonStriker(nextNonStriker);
 
-    if ((isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) ||
-        (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns)) {
+    if (isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) {
+      if (isOverEnd) {
+        completeOverAndPromptNextBowler(updatedBalls, bowler, newTotal, totalWickets, updatedBattersScorecard);
+      } else {
+        setLegalBalls(nextLegalBalls);
+        const updatedBowler = { ...bowler, overs: `${currentOverNumber}.${nextLegalBalls}` };
+        setBowler(updatedBowler);
+        handleSuperOverInnings2End(newTotal, totalWickets, `${currentOverNumber}.${nextLegalBalls}`, true);
+      }
+      return;
+    }
+
+    if (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns) {
       if (isOverEnd) {
         completeOverAndPromptNextBowler(updatedBalls, bowler, newTotal, totalWickets, updatedBattersScorecard);
       } else {
@@ -1605,8 +1696,19 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     setStriker(nextStriker);
     setNonStriker(nextNonStriker);
 
-    if ((isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) ||
-        (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns)) {
+    if (isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) {
+      if (isOverEnd) {
+        completeOverAndPromptNextBowler(updatedBalls, bowler, newTotal, totalWickets, updatedBattersScorecard);
+      } else {
+        setLegalBalls(nextLegalBalls);
+        const updatedBowler = { ...bowler, overs: `${currentOverNumber}.${nextLegalBalls}` };
+        setBowler(updatedBowler);
+        handleSuperOverInnings2End(newTotal, totalWickets, `${currentOverNumber}.${nextLegalBalls}`, true);
+      }
+      return;
+    }
+
+    if (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns) {
       if (isOverEnd) {
         completeOverAndPromptNextBowler(updatedBalls, bowler, newTotal, totalWickets, updatedBattersScorecard);
       } else {
@@ -1669,7 +1771,14 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     // Track dismissed batters in Super Over for ICC repeat restrictions
     if (isSuperOver) {
-      setDismissedSuperOverBatters((prev) => [...prev, dismissedBatter.name]);
+      setDismissedSuperOverBatters((prev) => ({
+        ...prev,
+        [currentBattingTeam]: [
+          ...((prev && prev[currentBattingTeam]) || []),
+          dismissedBatter.id || dismissedBatter.name,
+          dismissedBatter.name,
+        ],
+      }));
     }
 
     // Mark dismissed in scorecard
@@ -1709,24 +1818,32 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     let nextLegalBalls = legalBalls + 1;
     const isOverEnd = nextLegalBalls >= 6;
     const nextOverNum = isOverEnd ? currentOverNumber + 1 : currentOverNumber;
+    const finalOvers = isOverEnd ? `${nextOverNum}.0` : `${currentOverNumber}.${nextLegalBalls}`;
 
     // Filter available batters who haven't batted or been dismissed
     const dismissedNames = newFallOfWickets.map((f) => f.batter);
     const otherActiveBatterName = dismissedBatter.name === striker.name ? nonStriker.name : striker.name;
+    const teamDismissed = (dismissedSuperOverBatters && dismissedSuperOverBatters[currentBattingTeam]) || [];
     const availableBatters = currentBattingSquad.filter((p) => {
       if (dismissedNames.includes(p.name)) return false;
       if (p.name === dismissedBatter.name) return false;
       if (p.name === otherActiveBatterName) return false;
-      if (isSuperOver && (dismissedSuperOverBatters || []).includes(p.name)) return false;
+      if (isSuperOver && (teamDismissed.includes(p.id) || teamDismissed.includes(p.name))) return false;
       return true;
     });
 
     const isAllOut = newWickets >= activeMaxWickets || availableBatters.length === 0;
 
+    // Check target chase in Super Over chasing innings
+    if (isSuperOver && superOverInnings === 2 && superOverTarget && newRuns >= superOverTarget) {
+      setCurrentScreen('MAIN');
+      handleSuperOverInnings2End(newRuns, newWickets, finalOvers, true);
+      return;
+    }
+
     // Check target chase in 2nd innings
     if (!isSuperOver && currentInnings === 2 && targetRuns && newRuns >= targetRuns) {
       const marginWickets = activeMaxWickets - newWickets;
-      const finalOvers = isOverEnd ? `${nextOverNum}.0` : `${currentOverNumber}.${nextLegalBalls}`;
       handleMatchComplete({
         winner: firstInningsBowlingTeam,
         margin: `${marginWickets} wicket${marginWickets === 1 ? '' : 's'}`,
@@ -1744,18 +1861,17 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       setCurrentScreen('MAIN');
       if (isSuperOver) {
         if (superOverInnings === 1) {
-          handleSuperOverInnings1End(newRuns, newWickets, isOverEnd ? `${nextOverNum}.0` : `${currentOverNumber}.${nextLegalBalls}`);
+          handleSuperOverInnings1End(newRuns, newWickets, finalOvers);
         } else {
-          handleSuperOverInnings2End(newRuns, newWickets, isOverEnd ? `${nextOverNum}.0` : `${currentOverNumber}.${nextLegalBalls}`, superOverTarget && newRuns >= superOverTarget);
+          handleSuperOverInnings2End(newRuns, newWickets, finalOvers, superOverTarget && newRuns >= superOverTarget);
         }
         return;
       }
 
       if (currentInnings === 1) {
-        handleEndFirstInnings(newRuns, newWickets, isOverEnd ? `${nextOverNum}.0` : `${currentOverNumber}.${nextLegalBalls}`, updatedBattersScorecard);
+        handleEndFirstInnings(newRuns, newWickets, finalOvers, updatedBattersScorecard);
         return;
       } else {
-        const finalOvers = isOverEnd ? `${nextOverNum}.0` : `${currentOverNumber}.${nextLegalBalls}`;
         if (targetRuns && newRuns < targetRuns - 1) {
           const marginRuns = targetRuns - 1 - newRuns;
           handleMatchComplete({
@@ -1776,6 +1892,17 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     // Team NOT all out: select next batter safely
     const incomingBatter = availableBatters.find((b) => b.id === selectedNextBatter?.id) || availableBatters[0];
+    if (!incomingBatter) {
+      setCurrentScreen('MAIN');
+      if (isSuperOver) {
+        if (superOverInnings === 1) {
+          handleSuperOverInnings1End(newRuns, newWickets, finalOvers);
+        } else {
+          handleSuperOverInnings2End(newRuns, newWickets, finalOvers, superOverTarget && newRuns >= superOverTarget);
+        }
+        return;
+      }
+    }
     const newBatterObj = {
       id: incomingBatter.id,
       name: incomingBatter.name,
@@ -2105,7 +2232,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
               onPress={() => {
                 if (isSuperOver) {
                   if (superOverInnings === 1) setCurrentScreen('SUPER_OVER_SETUP');
-                  else setCurrentScreen(matchTiedData ? 'SUPER_OVER_TIED' : 'MATCH_RESULT');
+                  else setCurrentScreen(tiedSuperOverData ? 'SUPER_OVER_TIED' : 'MATCH_RESULT');
                 } else if (currentInnings === 1) {
                   setCurrentScreen('INNINGS_SUMMARY');
                 } else {
@@ -2115,7 +2242,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
               className="flex-1 py-3.5 mx-1 rounded-xl bg-[#22c55e] flex-row items-center justify-center active:bg-[#1ea34d]"
             >
               <Text className="text-black text-xs font-black tracking-wider">
-                {currentInnings === 1 && !isSuperOver ? 'VIEW SUMMARY' : 'VIEW RESULT'}
+                {(currentInnings === 1 && !isSuperOver) || (isSuperOver && superOverInnings === 1) ? 'VIEW SUMMARY' : 'VIEW RESULT'}
               </Text>
               <Feather name="arrow-right" size={15} color="#000000" style={{ marginLeft: 6 }} />
             </TouchableOpacity>
@@ -2265,7 +2392,13 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
                       text: 'End Innings',
                       style: 'destructive',
                       onPress: () => {
-                        if (currentInnings === 1) {
+                        if (isSuperOver) {
+                          if (superOverInnings === 1) {
+                            handleSuperOverInnings1End(totalRuns, totalWickets, `${currentOverNumber}.${legalBalls}`);
+                          } else {
+                            handleSuperOverInnings2End(totalRuns, totalWickets, `${currentOverNumber}.${legalBalls}`, superOverTarget && totalRuns >= superOverTarget);
+                          }
+                        } else if (currentInnings === 1) {
                           handleEndFirstInnings(totalRuns, totalWickets, `${currentOverNumber}.${legalBalls}`);
                         } else {
                           checkDeliveryProgress(totalRuns, totalWickets, legalBalls, currentOverNumber, true);
@@ -2701,12 +2834,13 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     // Filter available batters who haven't batted or been dismissed
     const dismissedNames = fallOfWickets.map((f) => f.batter);
     const otherActiveBatterName = dismissedBatter.name === striker.name ? nonStriker.name : striker.name;
+    const teamDismissed = (dismissedSuperOverBatters && dismissedSuperOverBatters[currentBattingTeam]) || [];
     const availableBatters = currentBattingSquad.filter((p) => {
       if (dismissedNames.includes(p.name)) return false;
       if (p.name === dismissedBatter.name) return false;
       if (p.name === otherActiveBatterName) return false;
       // In Super Over: ICC rule - batter dismissed in any previous Super Over cannot bat
-      if (isSuperOver && (dismissedSuperOverBatters || []).includes(p.name)) return false;
+      if (isSuperOver && (teamDismissed.includes(p.id) || teamDismissed.includes(p.name))) return false;
       return true;
     });
 
@@ -2747,8 +2881,14 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
             </View>
           </View>
 
-          <Text className="text-white text-sm font-bold mb-2.5">Select Next Batter</Text>
-          {availableBatters.length === 0 ? (
+          <Text className="text-white text-sm font-bold mb-2.5">
+            {isSuperOver && totalWickets >= 1 ? 'Super Over Conclusion' : 'Select Next Batter'}
+          </Text>
+          {isSuperOver && totalWickets >= 1 ? (
+            <Text className="text-[#888888] text-xs italic">
+              2nd wicket in Super Over reached. Innings will conclude immediately upon confirmation.
+            </Text>
+          ) : availableBatters.length === 0 ? (
             <Text className="text-[#888888] text-xs italic">No more batters remaining. Innings will conclude.</Text>
           ) : (
             availableBatters.map((p) => {
@@ -3655,7 +3795,12 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
                 Alert.alert('Duplicate Batter', 'Batter 1 and Batter 2 must be different players.');
                 return;
               }
-              if (dismissedBatters.includes(setupStrikerSO.id) || dismissedBatters.includes(setupNonStrikerSO.id)) {
+              if (
+                dismissedBatters.includes(setupStrikerSO.id) ||
+                dismissedBatters.includes(setupStrikerSO.name) ||
+                dismissedBatters.includes(setupNonStrikerSO.id) ||
+                dismissedBatters.includes(setupNonStrikerSO.name)
+              ) {
                 Alert.alert('Ineligible Batter', 'Batters dismissed in a previous Super Over cannot bat in subsequent Super Overs.');
                 return;
               }
@@ -3703,6 +3848,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
               setPastOvers([]);
               setFallOfWickets([]);
               setHistoryStack([]);
+              setMatchResult(null);
+              setMatchTiedData(null);
+              setTiedSuperOverData(null);
+              setTargetRuns(null);
 
               const s = { ...setupStrikerSO, runs: 0, balls: 0, fours: 0, sixes: 0 };
               const ns = { ...setupNonStrikerSO, runs: 0, balls: 0, fours: 0, sixes: 0 };
@@ -3716,7 +3865,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
               setShowBowlerSelectDrawer(false);
 
               // Initialize scorecard with eligible batters
-              const remainingBatters = battingSquad.filter((p) => !dismissedBatters.includes(p.id));
+              const remainingBatters = battingSquad.filter((p) => !dismissedBatters.includes(p.id) && !dismissedBatters.includes(p.name));
               setBattersScorecard(
                 remainingBatters.map((p) => {
                   if (p.id === s.id || p.id === ns.id) {
