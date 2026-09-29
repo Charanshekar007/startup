@@ -1165,7 +1165,8 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     setShowByeDrawer(false);
 
-    if (currentInnings === 2 && targetRuns && newTotal >= targetRuns) {
+    if ((isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) ||
+        (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns)) {
       checkDeliveryProgress(newTotal, totalWickets, legalBalls + 1, currentOverNumber, false);
       return;
     }
@@ -1229,7 +1230,8 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     setShowLegByeDrawer(false);
 
-    if (currentInnings === 2 && targetRuns && newTotal >= targetRuns) {
+    if ((isSuperOver && superOverInnings === 2 && superOverTarget && newTotal >= superOverTarget) ||
+        (!isSuperOver && currentInnings === 2 && targetRuns && newTotal >= targetRuns)) {
       checkDeliveryProgress(newTotal, totalWickets, legalBalls + 1, currentOverNumber, false);
       return;
     }
@@ -1283,6 +1285,11 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       },
     ]);
 
+    // Track dismissed batters in Super Over for ICC repeat restrictions
+    if (isSuperOver) {
+      setDismissedSuperOverBatters((prev) => [...prev, dismissedBatter.name]);
+    }
+
     // Mark dismissed in scorecard
     const dismissalText =
       selectedDismissal === 'Bowled'
@@ -1292,7 +1299,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         : selectedDismissal === 'Caught'
         ? `c ${selectedFielder?.name || 'Fielder'} b ${bowler.name}`
         : selectedDismissal === 'Stumped'
-        ? `st ${selectedFielder?.name || 'Keeper'} b ${bowler.name}`
+        ? `st ${selectedFielder?.name || wicketkeeper?.name || 'Keeper'} b ${bowler.name}`
         : `${selectedDismissal}`;
 
     setBattersScorecard((prev) =>
@@ -1319,8 +1326,8 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     let nextLegalBalls = legalBalls + 1;
 
-    // Check if 10 wickets are down (All Out!)
-    if (newWickets >= 10) {
+    // Check if team is All Out (10 wickets in normal match, 2 wickets in Super Over)
+    if (newWickets >= activeMaxWickets) {
       setCurrentScreen('MAIN');
       checkDeliveryProgress(newRuns, newWickets, nextLegalBalls, currentOverNumber, nextLegalBalls >= 6);
       return;
@@ -1371,9 +1378,15 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           <Feather name="arrow-left" size={22} color="#ffffff" />
         </TouchableOpacity>
         <View className="items-center">
-          <Text className="text-white text-base font-bold">Live Scoring</Text>
+          <Text className="text-white text-base font-bold">
+            {isSuperOver ? `SUPER OVER ${superOverNumber > 1 ? `#${superOverNumber}` : ''}` : 'Live Scoring'}
+          </Text>
           <Text className="text-[#23c55e] text-[10px] font-bold">
-            {currentInnings === 1 ? '1st Innings' : '2nd Innings (Chase)'}
+            {isSuperOver
+              ? `Innings ${superOverInnings} of 2`
+              : currentInnings === 1
+              ? '1st Innings'
+              : '2nd Innings (Chase)'}
           </Text>
         </View>
         <TouchableOpacity onPress={() => setShowSettingsModal(true)} className="p-1">
@@ -1407,7 +1420,23 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
               </Text>
               <Text className="text-[#888888] text-xs font-medium mt-0.5">{oversDecimal} Overs</Text>
 
-              {currentInnings === 1 ? (
+              {isSuperOver ? (
+                superOverInnings === 1 ? (
+                  <>
+                    <Text className="text-[#eab308] text-xs font-bold mt-1">Super Over (1 Over)</Text>
+                    <Text className="text-[#888888] text-[11px] mt-0.5">
+                      Max 2 Wickets • {totalBallsRemaining} legal balls left
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text className="text-[#23c55e] text-xs font-bold mt-1">Target {superOverTarget}</Text>
+                    <Text className="text-[#888888] text-[11px] mt-0.5">
+                      Need {runsNeeded} runs from {totalBallsRemaining} balls
+                    </Text>
+                  </>
+                )
+              ) : currentInnings === 1 ? (
                 <>
                   <Text className="text-[#23c55e] text-xs font-bold mt-1">
                     Max {totalOversMax} Overs
@@ -1509,9 +1538,18 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
               Econ: {getEconomy(bowler.runsConceded, bowler.overs || oversDecimal)}
             </Text>
             <Text className="text-[#888888] text-[11px]">
-              Max: {Math.ceil(totalOversMax / 5)} overs limit
+              Max: {isSuperOver ? '1 over limit' : `${Math.ceil(totalOversMax / 5)} overs limit`}
             </Text>
           </View>
+          {wicketkeeper?.name && (
+            <View className="flex-row items-center justify-between border-t border-[#1a1a1a] pt-2 mt-2">
+              <View className="flex-row items-center">
+                <Ionicons name="hand-left-outline" size={13} color="#888888" style={{ marginRight: 6 }} />
+                <Text className="text-[#888888] text-[11px]">Wicketkeeper:</Text>
+              </View>
+              <Text className="text-white text-[11px] font-semibold">{wicketkeeper.name}</Text>
+            </View>
+          )}
         </View>
 
         {/* This Over Deliveries Bar */}
@@ -2130,9 +2168,14 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
     // Filter available batters who haven't batted or been dismissed
     const dismissedNames = fallOfWickets.map((f) => f.batter);
-    const availableBatters = currentBattingSquad.filter(
-      (p) => !dismissedNames.includes(p.name) && p.name !== dismissedBatter.name && p.name !== (dismissedBatter.name === striker.name ? nonStriker.name : striker.name)
-    );
+    const availableBatters = currentBattingSquad.filter((p) => {
+      if (dismissedNames.includes(p.name)) return false;
+      if (p.name === dismissedBatter.name) return false;
+      if (p.name === (dismissedBatter.name === striker.name ? nonStriker.name : striker.name)) return false;
+      // In Super Over: ICC rule - batter dismissed in any previous Super Over cannot bat
+      if (isSuperOver && dismissedSuperOverBatters.includes(p.name)) return false;
+      return true;
+    });
 
     return (
       <View className="flex-1 bg-[#0a0a0a]">
@@ -2230,14 +2273,12 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       </View>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         <TouchableOpacity
-          onPress={() => {
-            handleEndFirstInnings(totalRuns, totalWickets, oversDecimal);
-          }}
+          onPress={() => setCurrentScreen('END_INNINGS_REASON')}
           className="bg-[#121212] border border-[#222222] p-4 rounded-xl mb-3 flex-row justify-between items-center"
         >
           <View>
             <Text className="text-white text-sm font-bold">Declare / End Current Innings</Text>
-            <Text className="text-[#888888] text-xs mt-1">Conclude current innings and prepare next</Text>
+            <Text className="text-[#888888] text-xs mt-1">Conclude current innings and proceed</Text>
           </View>
           <Feather name="chevron-right" size={18} color="#888" />
         </TouchableOpacity>
@@ -2262,13 +2303,54 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
             key={r}
             onPress={() => {
               setEndInningsReason(r);
-              handleEndFirstInnings(totalRuns, totalWickets, oversDecimal);
+              if (isSuperOver) {
+                if (superOverInnings === 1) {
+                  handleSuperOverInnings1End(totalRuns, totalWickets, oversDecimal);
+                } else {
+                  handleSuperOverInnings2End(totalRuns, totalWickets, oversDecimal, totalRuns >= (superOverTarget || 0));
+                }
+              } else if (currentInnings === 1) {
+                handleEndFirstInnings(totalRuns, totalWickets, oversDecimal);
+              } else {
+                // Second innings: check for tie or winner
+                if (targetRuns && totalRuns === targetRuns - 1) {
+                  handleMatchTied(totalRuns, totalWickets, oversDecimal);
+                } else {
+                  const winner = totalRuns >= targetRuns ? currentBattingTeam : currentBowlingTeam;
+                  const margin = totalRuns >= targetRuns
+                    ? `${10 - totalWickets} wickets`
+                    : `${targetRuns - 1 - totalRuns} runs`;
+                  const resultText = `${winner} won by ${margin}!`;
+                  handleMatchComplete({
+                    winner,
+                    margin,
+                    resultText,
+                    finalRuns: totalRuns,
+                    finalWickets: totalWickets,
+                    finalOversDecimal: oversDecimal,
+                  });
+                }
+              }
             }}
             className="bg-[#121212] p-4 rounded-xl border border-[#222222] mb-3"
           >
             <Text className="text-white text-sm font-bold">{r}</Text>
           </TouchableOpacity>
         ))}
+
+        {/* Shortcut to test Super Over flow */}
+        {!isSuperOver && (
+          <TouchableOpacity
+            onPress={() => {
+              const tiedRuns = firstInningsSummary?.totalRuns || 150;
+              handleMatchTied(tiedRuns, totalWickets, `${totalOversMax}.0`);
+            }}
+            className="bg-[#1a180e] p-4 rounded-xl border border-[#eab308]/40 mb-3"
+          >
+            <Text className="text-[#eab308] text-sm font-bold">Simulate Match Tied (Test Super Over)</Text>
+            <Text className="text-[#888888] text-xs mt-1">Forces both teams level to trigger Super Over flow</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   );
@@ -2375,7 +2457,18 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
         <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
           <TouchableOpacity
-            onPress={() => setCurrentScreen('SECOND_INNINGS_START')}
+            onPress={() => {
+              // Ensure defaults are populated fresh from the switched squads
+              const defStriker = secondInningsBattingSquad[0];
+              const defNonStriker = secondInningsBattingSquad[1] || secondInningsBattingSquad[0];
+              const defBowler = secondInningsBowlingSquad[secondInningsBowlingSquad.length - 1] || secondInningsBowlingSquad[0];
+              const defKeeper = secondInningsBowlingSquad.find((p) => p.role?.includes('WK')) || secondInningsBowlingSquad[0];
+              setSetupStriker2(defStriker);
+              setSetupNonStriker2(defNonStriker);
+              setSetupBowler2(defBowler);
+              setSetupKeeper2(defKeeper);
+              setCurrentScreen('SECOND_INNINGS_START');
+            }}
             className="bg-[#23c55e] py-4 rounded-xl items-center"
           >
             <Text className="text-black text-sm font-bold">SET UP SECOND INNINGS</Text>
@@ -2437,52 +2530,207 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           </View>
 
           {/* Section: Opening Batters */}
-          <Text className="text-[#23c55e] text-sm font-bold mb-3">
-            Select Opening Batters ({firstInningsBowlingTeam})
-          </Text>
+          <View className="flex-row items-center justify-between mb-3">
+            <Text className="text-[#23c55e] text-sm font-bold">
+              SELECT OPENING BATTERS ({firstInningsBowlingTeam})
+            </Text>
+            <View className="bg-[#1b2b1d] px-2 py-0.5 rounded">
+              <Text className="text-[#23c55e] text-[10px] font-bold">BATTING</Text>
+            </View>
+          </View>
 
           <Text className="text-[#888888] text-xs mb-1.5 font-medium">Striker</Text>
-          <View className="bg-[#121212] rounded-xl border border-[#222222] p-3.5 mb-3 flex-row items-center justify-between">
-            <View className="flex-row items-center flex-1">
-              <Image source={{ uri: setupStriker2?.img }} className="w-8 h-8 rounded-full mr-3 bg-[#222222]" />
-              <View>
-                <Text className="text-white text-sm font-bold">{setupStriker2?.name}</Text>
-                <Text className="text-[#888888] text-[10px]">{setupStriker2?.role}</Text>
+          <TouchableOpacity
+            onPress={() => {
+              setPickerConfig({
+                title: 'Select Striker',
+                role: 'Opening Batter',
+                team: firstInningsBowlingTeam,
+                players: secondInningsBattingSquad,
+                currentId: setupStriker2?.id,
+                restrictedIds: [setupNonStriker2?.id].filter(Boolean),
+                onSelect: (id) => {
+                  const p = secondInningsBattingSquad.find((x) => x.id === id);
+                  if (p) setSetupStriker2(p);
+                },
+              });
+            }}
+            className="bg-[#121212] rounded-xl border border-[#222222] p-3.5 mb-3 flex-row items-center justify-between"
+          >
+            <Text className="text-[#888888] text-sm font-bold w-6">1.</Text>
+            {setupStriker2 ? (
+              <View className="flex-row items-center flex-1">
+                <Image source={{ uri: setupStriker2.img }} className="w-8 h-8 rounded-full mr-3 bg-[#222222]" />
+                <View className="flex-1">
+                  <Text className="text-white text-sm font-bold">{setupStriker2.name}</Text>
+                  <Text className="text-[#888888] text-[10px]">{setupStriker2.role || 'Batter'} • {setupStriker2.style || 'Right Hand'}</Text>
+                </View>
               </View>
-            </View>
-          </View>
+            ) : (
+              <Text className="text-[#666666] text-sm flex-1">Tap to select striker</Text>
+            )}
+            <Feather name="chevron-down" size={18} color="#888888" />
+          </TouchableOpacity>
 
           <Text className="text-[#888888] text-xs mb-1.5 font-medium">Non-Striker</Text>
-          <View className="bg-[#121212] rounded-xl border border-[#222222] p-3.5 mb-5 flex-row items-center justify-between">
-            <View className="flex-row items-center flex-1">
-              <Image source={{ uri: setupNonStriker2?.img }} className="w-8 h-8 rounded-full mr-3 bg-[#222222]" />
-              <View>
-                <Text className="text-white text-sm font-bold">{setupNonStriker2?.name}</Text>
-                <Text className="text-[#888888] text-[10px]">{setupNonStriker2?.role}</Text>
+          <TouchableOpacity
+            onPress={() => {
+              setPickerConfig({
+                title: 'Select Non-Striker',
+                role: 'Opening Batter',
+                team: firstInningsBowlingTeam,
+                players: secondInningsBattingSquad,
+                currentId: setupNonStriker2?.id,
+                restrictedIds: [setupStriker2?.id].filter(Boolean),
+                onSelect: (id) => {
+                  const p = secondInningsBattingSquad.find((x) => x.id === id);
+                  if (p) setSetupNonStriker2(p);
+                },
+              });
+            }}
+            className="bg-[#121212] rounded-xl border border-[#222222] p-3.5 mb-5 flex-row items-center justify-between"
+          >
+            <Text className="text-[#888888] text-sm font-bold w-6">2.</Text>
+            {setupNonStriker2 ? (
+              <View className="flex-row items-center flex-1">
+                <Image source={{ uri: setupNonStriker2.img }} className="w-8 h-8 rounded-full mr-3 bg-[#222222]" />
+                <View className="flex-1">
+                  <Text className="text-white text-sm font-bold">{setupNonStriker2.name}</Text>
+                  <Text className="text-[#888888] text-[10px]">{setupNonStriker2.role || 'Batter'} • {setupNonStriker2.style || 'Right Hand'}</Text>
+                </View>
               </View>
-            </View>
-          </View>
+            ) : (
+              <Text className="text-[#666666] text-sm flex-1">Tap to select non-striker</Text>
+            )}
+            <Feather name="chevron-down" size={18} color="#888888" />
+          </TouchableOpacity>
 
           {/* Section: Opening Bowler */}
-          <Text className="text-[#23c55e] text-sm font-bold mb-3">
-            Select Opening Bowler ({firstInningsBattingTeam})
-          </Text>
-          <View className="bg-[#121212] rounded-xl border border-[#222222] p-3.5 mb-4 flex-row items-center justify-between">
-            <View className="flex-row items-center flex-1">
-              <Image source={{ uri: setupBowler2?.img }} className="w-8 h-8 rounded-full mr-3 bg-[#222222]" />
-              <View>
-                <Text className="text-white text-sm font-bold">{setupBowler2?.name}</Text>
-                <Text className="text-[#888888] text-[10px]">{setupBowler2?.role}</Text>
-              </View>
+          <View className="flex-row items-center justify-between mb-3 mt-1">
+            <Text className="text-[#23c55e] text-sm font-bold">
+              SELECT OPENING BOWLER ({firstInningsBattingTeam})
+            </Text>
+            <View className="bg-[#2a1b1b] px-2 py-0.5 rounded">
+              <Text className="text-[#ef4444] text-[10px] font-bold">BOWLING</Text>
             </View>
           </View>
+          <TouchableOpacity
+            onPress={() => {
+              setPickerConfig({
+                title: 'Select Opening Bowler',
+                role: 'Opening Bowler',
+                team: firstInningsBattingTeam,
+                players: secondInningsBowlingSquad,
+                currentId: setupBowler2?.id,
+                onSelect: (id) => {
+                  const p = secondInningsBowlingSquad.find((x) => x.id === id);
+                  if (p) setSetupBowler2(p);
+                },
+              });
+            }}
+            className="bg-[#121212] rounded-xl border border-[#222222] p-3.5 mb-5 flex-row items-center justify-between"
+          >
+            <Text className="text-[#888888] text-sm font-bold w-6">1.</Text>
+            {setupBowler2 ? (
+              <View className="flex-row items-center flex-1">
+                <Image source={{ uri: setupBowler2.img }} className="w-8 h-8 rounded-full mr-3 bg-[#222222]" />
+                <View className="flex-1">
+                  <Text className="text-white text-sm font-bold">{setupBowler2.name}</Text>
+                  <Text className="text-[#888888] text-[10px]">{setupBowler2.role || 'Bowler'} • {setupBowler2.style || 'Right Arm'}</Text>
+                </View>
+              </View>
+            ) : (
+              <Text className="text-[#666666] text-sm flex-1">Tap to select bowler</Text>
+            )}
+            <Feather name="chevron-down" size={18} color="#888888" />
+          </TouchableOpacity>
+
+          {/* Section: Wicketkeeper (Fielding Team) */}
+          <View className="flex-row items-center justify-between mb-3 mt-1">
+            <Text className="text-[#23c55e] text-sm font-bold">
+              SELECT WICKETKEEPER ({firstInningsBattingTeam})
+            </Text>
+            <View className="bg-[#1f2937] px-2 py-0.5 rounded">
+              <Text className="text-[#60a5fa] text-[10px] font-bold">FIELDING</Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={() => {
+              setPickerConfig({
+                title: 'Select Wicketkeeper',
+                role: 'Wicketkeeper',
+                team: firstInningsBattingTeam,
+                players: secondInningsBowlingSquad,
+                currentId: setupKeeper2?.id,
+                onSelect: (id) => {
+                  const p = secondInningsBowlingSquad.find((x) => x.id === id);
+                  if (p) setSetupKeeper2(p);
+                },
+              });
+            }}
+            className="bg-[#121212] rounded-xl border border-[#222222] p-3.5 mb-4 flex-row items-center justify-between"
+          >
+            <MaterialCommunityIcons name="hand-back-left" size={18} color="#888888" style={{ width: 24 }} />
+            {setupKeeper2 ? (
+              <View className="flex-row items-center flex-1">
+                <Image source={{ uri: setupKeeper2.img }} className="w-8 h-8 rounded-full mr-3 bg-[#222222]" />
+                <View className="flex-1">
+                  <Text className="text-white text-sm font-bold">{setupKeeper2.name}</Text>
+                  <Text className="text-[#888888] text-[10px]">{setupKeeper2.role || 'Wicketkeeper'} • {setupKeeper2.style || ''}</Text>
+                </View>
+              </View>
+            ) : (
+              <Text className="text-[#666666] text-sm flex-1">Tap to select wicketkeeper</Text>
+            )}
+            <Feather name="chevron-down" size={18} color="#888888" />
+          </TouchableOpacity>
         </ScrollView>
 
         <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
           <TouchableOpacity
             onPress={() => {
+              // Validations
+              if (!setupStriker2 || !setupNonStriker2) {
+                Alert.alert('Select Batters', 'Please select both opening batters.');
+                return;
+              }
+              if (setupStriker2.id === setupNonStriker2.id) {
+                Alert.alert('Duplicate Batter', 'Striker and Non-Striker must be different players.');
+                return;
+              }
+              // Batting players validation: MUST be from batting team's Playing XI
+              const isStrikerValid = secondInningsBattingSquad.some((p) => p.id === setupStriker2.id);
+              const isNonStrikerValid = secondInningsBattingSquad.some((p) => p.id === setupNonStriker2.id);
+              if (!isStrikerValid || !isNonStrikerValid) {
+                Alert.alert('Invalid Batter', `Opening batters must belong to ${firstInningsBowlingTeam}'s Playing XI.`);
+                return;
+              }
+
+              if (!setupBowler2) {
+                Alert.alert('Select Bowler', 'Please select the opening bowler.');
+                return;
+              }
+              // Bowler validation: MUST be from bowling team's Playing XI
+              const isBowlerValid = secondInningsBowlingSquad.some((p) => p.id === setupBowler2.id);
+              if (!isBowlerValid) {
+                Alert.alert('Invalid Bowler', `Opening bowler must belong to ${firstInningsBattingTeam}'s Playing XI.`);
+                return;
+              }
+
+              if (!setupKeeper2) {
+                Alert.alert('Select Wicketkeeper', 'Please select the wicketkeeper from the fielding team.');
+                return;
+              }
+              // Wicketkeeper validation: MUST be from fielding team's Playing XI
+              const isKeeperValid = secondInningsBowlingSquad.some((p) => p.id === setupKeeper2.id);
+              if (!isKeeperValid) {
+                Alert.alert('Invalid Wicketkeeper', `Wicketkeeper must belong to ${firstInningsBattingTeam}'s Playing XI.`);
+                return;
+              }
+
               // Complete fresh reset for 2nd innings live scoring
               setCurrentInnings(2);
+              setIsSuperOver(false);
               setTotalRuns(0);
               setTotalWickets(0);
               setLegalBalls(0);
@@ -2502,6 +2750,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
               setStriker(s2);
               setNonStriker(ns2);
               setBowler(b2);
+              setWicketkeeper(setupKeeper2);
               setPreviousBowlerId(null);
               setShowBowlerSelectDrawer(false);
 
@@ -2526,7 +2775,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
                 {
                   id: 'c2_start',
                   over: '0.0',
-                  text: `Second Innings begins! ${firstInningsBowlingTeam} need ${target} runs from ${totalOversMax} overs to win. ${s2.name} and ${ns2.name} are opening. ${b2.name} has the ball.`,
+                  text: `Second Innings begins! ${firstInningsBowlingTeam} need ${target} runs from ${totalOversMax} overs to win. ${s2.name} and ${ns2.name} are opening. ${b2.name} is bowling with ${setupKeeper2.name} keeping wickets.`,
                 },
               ]);
 
@@ -2535,6 +2784,500 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
             className="bg-[#23c55e] py-4 rounded-xl items-center"
           >
             <Text className="text-black text-sm font-bold">START 2ND INNINGS & BEGIN SCORING</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  // =========================================================================
+  // SCREEN: MATCH TIED (PROMPT SUPER OVER)
+  // =========================================================================
+  const renderMatchTiedScreen = () => {
+    const inn1 = firstInningsSummary || { battingTeam: firstInningsBattingTeam, totalRuns };
+    const inn2 = secondInningsSummary || { battingTeam: firstInningsBowlingTeam, totalRuns };
+
+    return (
+      <View className="flex-1 bg-[#0a0a0a]">
+        <View className="flex-row items-center px-4 py-3 border-b border-[#1f1f1f]">
+          <TouchableOpacity onPress={() => setCurrentScreen('MAIN')} className="p-1">
+            <Feather name="arrow-left" size={22} color="#ffffff" />
+          </TouchableOpacity>
+          <Text className="text-white text-base font-bold ml-4">Match Tied</Text>
+        </View>
+
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: 120, alignItems: 'center' }}>
+          {/* Badge */}
+          <View className="w-20 h-20 rounded-full bg-[#eab308]/15 border-2 border-[#eab308] items-center justify-center mb-4">
+            <Ionicons name="git-compare" size={36} color="#eab308" />
+          </View>
+
+          <Text className="text-white text-2xl font-black mb-1 text-center">MATCH TIED</Text>
+          <Text className="text-[#888888] text-xs font-medium text-center mb-6">
+            Both teams finished with identical scores after {totalOversMax} overs!
+          </Text>
+
+          {/* Scores Display */}
+          <View className="bg-[#121212] rounded-2xl border border-[#222222] p-5 w-full mb-6">
+            <View className="flex-row items-center justify-between pb-4 border-b border-[#222222]">
+              <View className="flex-1">
+                <Text className="text-white text-base font-bold" numberOfLines={1}>{inn1.battingTeam}</Text>
+                <Text className="text-[#888888] text-xs">1st Innings</Text>
+              </View>
+              <Text className="text-white text-2xl font-black">{inn1.totalRuns}</Text>
+            </View>
+
+            <View className="items-center py-2">
+              <Text className="text-[#eab308] text-xs font-bold tracking-widest">TIED</Text>
+            </View>
+
+            <View className="flex-row items-center justify-between pt-4 border-t border-[#222222]">
+              <View className="flex-1">
+                <Text className="text-white text-base font-bold" numberOfLines={1}>{inn2.battingTeam}</Text>
+                <Text className="text-[#888888] text-xs">2nd Innings</Text>
+              </View>
+              <Text className="text-white text-2xl font-black">{inn2.totalRuns}</Text>
+            </View>
+          </View>
+
+          {/* ICC Rule Explainer */}
+          <View className="bg-[#141414] rounded-xl border border-[#262626] p-4 w-full mb-6">
+            <Text className="text-[#eab308] text-xs font-bold mb-1.5">ICC Super Over Procedure</Text>
+            <Text className="text-[#aaaaaa] text-xs leading-5">
+              • Each team faces 1 over (6 legal deliveries) or 2 wickets maximum.{'\n'}
+              • The team that batted second in the main match ({firstInningsBowlingTeam}) bats FIRST in the Super Over.{'\n'}
+              • Team scoring the most runs in its Super Over wins the match.
+            </Text>
+          </View>
+        </ScrollView>
+
+        <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
+          <TouchableOpacity
+            onPress={() => startSuperOverFlow(1)}
+            className="bg-[#23c55e] py-4 rounded-xl items-center"
+          >
+            <Text className="text-black text-sm font-black tracking-wider">SUPER OVER</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  // =========================================================================
+  // SCREEN: SUPER OVER SETUP
+  // =========================================================================
+  const renderSuperOverSetupScreen = () => {
+    const battingSquad = superOverBattingTeam === teamA ? playingXI_A : playingXI_B;
+    const bowlingSquad = superOverBowlingTeam === teamA ? playingXI_A : playingXI_B;
+
+    const dismissedBatters = dismissedSuperOverBatters[superOverBattingTeam] || [];
+    const prevBowlerId = previousSuperOverBowlers[superOverBowlingTeam];
+
+    return (
+      <View className="flex-1 bg-[#0a0a0a]">
+        <View className="flex-row items-center px-4 py-3 border-b border-[#1f1f1f]">
+          <TouchableOpacity
+            onPress={() => {
+              if (superOverInnings === 1 && superOverNumber === 1) setCurrentScreen('MATCH_TIED');
+              else setCurrentScreen('MAIN');
+            }}
+            className="p-1"
+          >
+            <Feather name="arrow-left" size={22} color="#ffffff" />
+          </TouchableOpacity>
+          <Text className="text-white text-base font-bold ml-4">
+            Super Over {superOverNumber > 1 ? `#${superOverNumber}` : ''} Setup
+          </Text>
+        </View>
+
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 120 }}>
+          {/* Matchup Header */}
+          <View className="bg-[#121212] rounded-2xl border border-[#222222] p-5 mb-5 items-center">
+            <View className="bg-[#eab308]/15 px-3 py-1 rounded-full mb-3 border border-[#eab308]/30">
+              <Text className="text-[#eab308] text-[10px] font-black tracking-widest">
+                SUPER OVER {superOverNumber > 1 ? `#${superOverNumber}` : ''} • INNINGS {superOverInnings} OF 2
+              </Text>
+            </View>
+
+            <View className="flex-row items-center justify-between w-full mb-4 px-4">
+              <View className="items-center">
+                <View className="w-12 h-12 rounded-full bg-[#1b2b1d] border border-[#23c55e] items-center justify-center mb-1">
+                  <Ionicons name="flash" size={20} color="#23c55e" />
+                </View>
+                <Text className="text-white text-xs font-bold text-center" numberOfLines={1}>{superOverBattingTeam}</Text>
+                <Text className="text-[#23c55e] text-[9px] font-bold">BATTING</Text>
+              </View>
+              <Text className="text-[#888888] text-xs font-bold">VS</Text>
+              <View className="items-center">
+                <View className="w-12 h-12 rounded-full bg-[#2a1b1b] border border-[#ef4444] items-center justify-center mb-1">
+                  <FontAwesome5 name="shield-alt" size={18} color="#ef4444" />
+                </View>
+                <Text className="text-white text-xs font-bold text-center" numberOfLines={1}>{superOverBowlingTeam}</Text>
+                <Text className="text-[#ef4444] text-[9px] font-bold">BOWLING</Text>
+              </View>
+            </View>
+
+            <View className="border-t border-[#222222] pt-3 w-full flex-row justify-around">
+              <View className="items-center">
+                <Text className="text-[#888888] text-[10px]">Overs</Text>
+                <Text className="text-white text-sm font-bold">1 Over (6 balls)</Text>
+              </View>
+              <View className="items-center">
+                <Text className="text-[#888888] text-[10px]">Wickets</Text>
+                <Text className="text-[#ef4444] text-sm font-bold">Max 2 Wickets</Text>
+              </View>
+              {superOverInnings === 2 && (
+                <View className="items-center">
+                  <Text className="text-[#888888] text-[10px]">Target</Text>
+                  <Text className="text-[#23c55e] text-sm font-bold">{superOverTarget} Runs</Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Batters Selection */}
+          <View className="flex-row items-center justify-between mb-3">
+            <Text className="text-[#23c55e] text-sm font-bold">
+              SELECT OPENING BATTERS ({superOverBattingTeam})
+            </Text>
+            <View className="bg-[#1b2b1d] px-2 py-0.5 rounded">
+              <Text className="text-[#23c55e] text-[10px] font-bold">BATTING</Text>
+            </View>
+          </View>
+
+          <Text className="text-[#888888] text-xs mb-1.5 font-medium">Opening Batter 1 (Striker)</Text>
+          <TouchableOpacity
+            onPress={() => {
+              setPickerConfig({
+                title: 'Select Opening Batter 1',
+                role: 'Opening Batter',
+                team: superOverBattingTeam,
+                players: battingSquad,
+                currentId: setupStrikerSO?.id,
+                restrictedIds: [...dismissedBatters, setupNonStrikerSO?.id].filter(Boolean),
+                restrictionReason: 'Ineligible (dismissed in previous Super Over)',
+                onSelect: (id) => {
+                  const p = battingSquad.find((x) => x.id === id);
+                  if (p) setSetupStrikerSO(p);
+                },
+              });
+            }}
+            className="bg-[#121212] rounded-xl border border-[#222222] p-3.5 mb-3 flex-row items-center justify-between"
+          >
+            <Text className="text-[#888888] text-sm font-bold w-6">1.</Text>
+            {setupStrikerSO ? (
+              <View className="flex-row items-center flex-1">
+                <Image source={{ uri: setupStrikerSO.img }} className="w-8 h-8 rounded-full mr-3 bg-[#222222]" />
+                <View className="flex-1">
+                  <Text className="text-white text-sm font-bold">{setupStrikerSO.name}</Text>
+                  <Text className="text-[#888888] text-[10px]">{setupStrikerSO.role || 'Batter'} • {setupStrikerSO.style || ''}</Text>
+                </View>
+              </View>
+            ) : (
+              <Text className="text-[#666666] text-sm flex-1">Tap to select batter 1</Text>
+            )}
+            <Feather name="chevron-down" size={18} color="#888888" />
+          </TouchableOpacity>
+
+          <Text className="text-[#888888] text-xs mb-1.5 font-medium">Opening Batter 2 (Non-Striker)</Text>
+          <TouchableOpacity
+            onPress={() => {
+              setPickerConfig({
+                title: 'Select Opening Batter 2',
+                role: 'Opening Batter',
+                team: superOverBattingTeam,
+                players: battingSquad,
+                currentId: setupNonStrikerSO?.id,
+                restrictedIds: [...dismissedBatters, setupStrikerSO?.id].filter(Boolean),
+                restrictionReason: 'Ineligible (dismissed in previous Super Over)',
+                onSelect: (id) => {
+                  const p = battingSquad.find((x) => x.id === id);
+                  if (p) setSetupNonStrikerSO(p);
+                },
+              });
+            }}
+            className="bg-[#121212] rounded-xl border border-[#222222] p-3.5 mb-5 flex-row items-center justify-between"
+          >
+            <Text className="text-[#888888] text-sm font-bold w-6">2.</Text>
+            {setupNonStrikerSO ? (
+              <View className="flex-row items-center flex-1">
+                <Image source={{ uri: setupNonStrikerSO.img }} className="w-8 h-8 rounded-full mr-3 bg-[#222222]" />
+                <View className="flex-1">
+                  <Text className="text-white text-sm font-bold">{setupNonStrikerSO.name}</Text>
+                  <Text className="text-[#888888] text-[10px]">{setupNonStrikerSO.role || 'Batter'} • {setupNonStrikerSO.style || ''}</Text>
+                </View>
+              </View>
+            ) : (
+              <Text className="text-[#666666] text-sm flex-1">Tap to select batter 2</Text>
+            )}
+            <Feather name="chevron-down" size={18} color="#888888" />
+          </TouchableOpacity>
+
+          {/* Bowler Selection */}
+          <View className="flex-row items-center justify-between mb-3 mt-1">
+            <Text className="text-[#23c55e] text-sm font-bold">
+              SELECT BOWLER ({superOverBowlingTeam})
+            </Text>
+            <View className="bg-[#2a1b1b] px-2 py-0.5 rounded">
+              <Text className="text-[#ef4444] text-[10px] font-bold">BOWLING</Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={() => {
+              setPickerConfig({
+                title: 'Select Bowler',
+                role: 'Bowler',
+                team: superOverBowlingTeam,
+                players: bowlingSquad,
+                currentId: setupBowlerSO?.id,
+                restrictedIds: prevBowlerId ? [prevBowlerId] : [],
+                restrictionReason: 'Ineligible (bowled in previous Super Over)',
+                onSelect: (id) => {
+                  const p = bowlingSquad.find((x) => x.id === id);
+                  if (p) setSetupBowlerSO(p);
+                },
+              });
+            }}
+            className="bg-[#121212] rounded-xl border border-[#222222] p-3.5 mb-5 flex-row items-center justify-between"
+          >
+            <Text className="text-[#888888] text-sm font-bold w-6">1.</Text>
+            {setupBowlerSO ? (
+              <View className="flex-row items-center flex-1">
+                <Image source={{ uri: setupBowlerSO.img }} className="w-8 h-8 rounded-full mr-3 bg-[#222222]" />
+                <View className="flex-1">
+                  <Text className="text-white text-sm font-bold">{setupBowlerSO.name}</Text>
+                  <Text className="text-[#888888] text-[10px]">{setupBowlerSO.role || 'Bowler'} • {setupBowlerSO.style || ''}</Text>
+                </View>
+              </View>
+            ) : (
+              <Text className="text-[#666666] text-sm flex-1">Tap to select bowler</Text>
+            )}
+            <Feather name="chevron-down" size={18} color="#888888" />
+          </TouchableOpacity>
+
+          {/* Wicketkeeper Selection */}
+          <View className="flex-row items-center justify-between mb-3 mt-1">
+            <Text className="text-[#23c55e] text-sm font-bold">
+              SELECT WICKETKEEPER ({superOverBowlingTeam})
+            </Text>
+            <View className="bg-[#1f2937] px-2 py-0.5 rounded">
+              <Text className="text-[#60a5fa] text-[10px] font-bold">FIELDING</Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={() => {
+              setPickerConfig({
+                title: 'Select Wicketkeeper',
+                role: 'Wicketkeeper',
+                team: superOverBowlingTeam,
+                players: bowlingSquad,
+                currentId: setupKeeperSO?.id,
+                onSelect: (id) => {
+                  const p = bowlingSquad.find((x) => x.id === id);
+                  if (p) setSetupKeeperSO(p);
+                },
+              });
+            }}
+            className="bg-[#121212] rounded-xl border border-[#222222] p-3.5 mb-4 flex-row items-center justify-between"
+          >
+            <MaterialCommunityIcons name="hand-back-left" size={18} color="#888888" style={{ width: 24 }} />
+            {setupKeeperSO ? (
+              <View className="flex-row items-center flex-1">
+                <Image source={{ uri: setupKeeperSO.img }} className="w-8 h-8 rounded-full mr-3 bg-[#222222]" />
+                <View className="flex-1">
+                  <Text className="text-white text-sm font-bold">{setupKeeperSO.name}</Text>
+                  <Text className="text-[#888888] text-[10px]">{setupKeeperSO.role || 'Wicketkeeper'}</Text>
+                </View>
+              </View>
+            ) : (
+              <Text className="text-[#666666] text-sm flex-1">Tap to select wicketkeeper</Text>
+            )}
+            <Feather name="chevron-down" size={18} color="#888888" />
+          </TouchableOpacity>
+        </ScrollView>
+
+        <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
+          <TouchableOpacity
+            onPress={() => {
+              if (!setupStrikerSO || !setupNonStrikerSO) {
+                Alert.alert('Select Batters', 'Please select both opening batters.');
+                return;
+              }
+              if (setupStrikerSO.id === setupNonStrikerSO.id) {
+                Alert.alert('Duplicate Batter', 'Batter 1 and Batter 2 must be different players.');
+                return;
+              }
+              if (dismissedBatters.includes(setupStrikerSO.id) || dismissedBatters.includes(setupNonStrikerSO.id)) {
+                Alert.alert('Ineligible Batter', 'Batters dismissed in a previous Super Over cannot bat in subsequent Super Overs.');
+                return;
+              }
+              if (!setupBowlerSO) {
+                Alert.alert('Select Bowler', 'Please select the bowler.');
+                return;
+              }
+              if (prevBowlerId && setupBowlerSO.id === prevBowlerId) {
+                Alert.alert('Ineligible Bowler', 'The bowler who bowled the previous Super Over cannot bowl the next Super Over.');
+                return;
+              }
+              if (!setupKeeperSO) {
+                Alert.alert('Select Wicketkeeper', 'Please select the wicketkeeper from the fielding team.');
+                return;
+              }
+
+              // Batting squad check
+              const isStrikerValid = battingSquad.some((p) => p.id === setupStrikerSO.id);
+              const isNonStrikerValid = battingSquad.some((p) => p.id === setupNonStrikerSO.id);
+              if (!isStrikerValid || !isNonStrikerValid) {
+                Alert.alert('Invalid Batter', `Batters must belong to ${superOverBattingTeam}'s Playing XI.`);
+                return;
+              }
+              // Bowling squad check
+              const isBowlerValid = bowlingSquad.some((p) => p.id === setupBowlerSO.id);
+              if (!isBowlerValid) {
+                Alert.alert('Invalid Bowler', `Bowler must belong to ${superOverBowlingTeam}'s Playing XI.`);
+                return;
+              }
+              const isKeeperValid = bowlingSquad.some((p) => p.id === setupKeeperSO.id);
+              if (!isKeeperValid) {
+                Alert.alert('Invalid Wicketkeeper', `Wicketkeeper must belong to ${superOverBowlingTeam}'s Playing XI.`);
+                return;
+              }
+
+              // Initialize live scoring engine for Super Over
+              setIsSuperOver(true);
+              setTotalRuns(0);
+              setTotalWickets(0);
+              setLegalBalls(0);
+              setCurrentOverNumber(0);
+              setExtrasTotal(0);
+              setExtrasBreakdown({ wides: 0, noBalls: 0, byes: 0, legByes: 0, penalty: 0 });
+              setCurrentOverBalls([]);
+              setPastOvers([]);
+              setFallOfWickets([]);
+              setHistoryStack([]);
+
+              const s = { ...setupStrikerSO, runs: 0, balls: 0, fours: 0, sixes: 0 };
+              const ns = { ...setupNonStrikerSO, runs: 0, balls: 0, fours: 0, sixes: 0 };
+              const b = { ...setupBowlerSO, overs: '0.0', maidens: 0, runsConceded: 0, wickets: 0 };
+
+              setStriker(s);
+              setNonStriker(ns);
+              setBowler(b);
+              setWicketkeeper(setupKeeperSO);
+              setPreviousBowlerId(null);
+              setShowBowlerSelectDrawer(false);
+
+              // Initialize scorecard with eligible batters
+              const remainingBatters = battingSquad.filter((p) => !dismissedBatters.includes(p.id));
+              setBattersScorecard(
+                remainingBatters.map((p) => {
+                  if (p.id === s.id || p.id === ns.id) {
+                    return { ...p, runs: 0, balls: 0, fours: 0, sixes: 0, status: 'not out', dismissal: 'batting' };
+                  }
+                  return { ...p, runs: 0, balls: 0, fours: 0, sixes: 0, status: 'yet to bat', dismissal: '' };
+                })
+              );
+
+              const bMap = {};
+              bowlingSquad.forEach((p) => {
+                bMap[p.id] = { name: p.name, overs: 0, balls: 0, maidens: 0, runsConceded: 0, wickets: 0 };
+              });
+              setBowlerStatsMap(bMap);
+
+              setCommentaryList([
+                {
+                  id: `so_c_${Date.now()}`,
+                  over: '0.0',
+                  text: `Super Over ${superOverNumber > 1 ? `#${superOverNumber} ` : ''}Innings ${superOverInnings} begins! ${superOverBattingTeam} batting vs ${superOverBowlingTeam}. ${s.name} & ${ns.name} at the crease. ${b.name} bowling, ${setupKeeperSO.name} keeping.`,
+                },
+              ]);
+
+              setCurrentScreen('MAIN');
+            }}
+            className="bg-[#23c55e] py-4 rounded-xl items-center"
+          >
+            <Text className="text-black text-sm font-black tracking-wider">START SUPER OVER</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  // =========================================================================
+  // SCREEN: SUPER OVER TIED
+  // =========================================================================
+  const renderSuperOverTiedScreen = () => {
+    const tiedData = tiedSuperOverData;
+    const soNum = tiedData?.superOverNumber || superOverNumber;
+    const nextSO = soNum + 1;
+
+    return (
+      <View className="flex-1 bg-[#0a0a0a]">
+        <View className="flex-row items-center px-4 py-3 border-b border-[#1f1f1f]">
+          <TouchableOpacity onPress={() => setCurrentScreen('MAIN')} className="p-1">
+            <Feather name="arrow-left" size={22} color="#ffffff" />
+          </TouchableOpacity>
+          <Text className="text-white text-base font-bold ml-4">Super Over Tied</Text>
+        </View>
+
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: 120, alignItems: 'center' }}>
+          <View className="w-20 h-20 rounded-full bg-[#ef4444]/15 border-2 border-[#ef4444] items-center justify-center mb-4">
+            <Ionicons name="repeat" size={36} color="#ef4444" />
+          </View>
+
+          <Text className="text-white text-2xl font-black mb-1 text-center">
+            SUPER OVER {soNum > 1 ? `#${soNum} ` : ''}TIED!
+          </Text>
+          <Text className="text-[#888888] text-xs font-medium text-center mb-6">
+            Both teams scored equal runs in the Super Over. Under ICC rules, another Super Over must be played!
+          </Text>
+
+          {/* Scores Display */}
+          <View className="bg-[#121212] rounded-2xl border border-[#222222] p-5 w-full mb-5">
+            <View className="flex-row items-center justify-between pb-3 border-b border-[#222222]">
+              <View className="flex-1">
+                <Text className="text-white text-base font-bold" numberOfLines={1}>{tiedData?.innings1?.battingTeam}</Text>
+                <Text className="text-[#888888] text-xs">Super Over Innings 1</Text>
+              </View>
+              <Text className="text-white text-xl font-black">
+                {tiedData?.innings1?.totalRuns}/{tiedData?.innings1?.totalWickets}
+              </Text>
+            </View>
+
+            <View className="items-center py-2">
+              <Text className="text-[#ef4444] text-xs font-bold tracking-widest">SCORES TIED</Text>
+            </View>
+
+            <View className="flex-row items-center justify-between pt-3 border-t border-[#222222]">
+              <View className="flex-1">
+                <Text className="text-white text-base font-bold" numberOfLines={1}>{tiedData?.innings2?.battingTeam}</Text>
+                <Text className="text-[#888888] text-xs">Super Over Innings 2</Text>
+              </View>
+              <Text className="text-white text-xl font-black">
+                {tiedData?.innings2?.totalRuns}/{tiedData?.innings2?.totalWickets}
+              </Text>
+            </View>
+          </View>
+
+          {/* ICC Rules for Repeat Super Over */}
+          <View className="bg-[#141414] rounded-xl border border-[#262626] p-4 w-full mb-6">
+            <Text className="text-[#eab308] text-xs font-bold mb-2">ICC Repeated Super Over Rules</Text>
+            <Text className="text-[#aaaaaa] text-xs leading-5">
+              1. The team that batted second in this Super Over ({tiedData?.innings2?.battingTeam}) will bat FIRST in Super Over #{nextSO}.{'\n'}
+              2. Batters dismissed in previous Super Overs cannot bat again.{'\n'}
+              3. The bowler who bowled this Super Over cannot bowl the next Super Over.
+            </Text>
+          </View>
+        </ScrollView>
+
+        <View className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]">
+          <TouchableOpacity
+            onPress={() => startSuperOverFlow(nextSO)}
+            className="bg-[#23c55e] py-4 rounded-xl items-center"
+          >
+            <Text className="text-black text-sm font-black tracking-wider">
+              START SUPER OVER #{nextSO}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -2616,6 +3359,39 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
               </Text>
             </View>
           </View>
+
+          {/* Super Over summary cards if any */}
+          {res.superOvers && res.superOvers.length > 0 && (
+            <View className="bg-[#121212] rounded-2xl border border-[#eab308]/40 p-4 mb-5">
+              <View className="flex-row items-center justify-between mb-2">
+                <Text className="text-[#eab308] text-xs font-bold uppercase tracking-wider">
+                  SUPER OVER SCORECARD
+                </Text>
+                <View className="bg-[#eab308]/15 px-2 py-0.5 rounded">
+                  <Text className="text-[#eab308] text-[10px] font-bold">MATCH DECIDER</Text>
+                </View>
+              </View>
+              {res.superOvers.map((so, idx) => (
+                <View key={idx} className="border-t border-[#222222] pt-2.5 mt-2">
+                  <Text className="text-[#888888] text-[11px] font-bold mb-1.5">
+                    Super Over {so.superOverNumber > 1 ? `#${so.superOverNumber}` : '1'} {so.winner ? `• Winner: ${so.winner}` : '• TIED'}
+                  </Text>
+                  <View className="flex-row justify-between items-center mb-1">
+                    <Text className="text-white text-xs font-semibold">{so.innings1?.battingTeam}</Text>
+                    <Text className="text-white text-xs font-bold">
+                      {so.innings1?.totalRuns}/{so.innings1?.totalWickets} ({so.innings1?.overs} Ov)
+                    </Text>
+                  </View>
+                  <View className="flex-row justify-between items-center">
+                    <Text className="text-white text-xs font-semibold">{so.innings2?.battingTeam}</Text>
+                    <Text className="text-white text-xs font-bold">
+                      {so.innings2?.totalRuns}/{so.innings2?.totalWickets} ({so.innings2?.overs} Ov)
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
 
           {/* Scorecard Tab Selector */}
           <View className="flex-row bg-[#181818] rounded-xl p-1 mb-4 border border-[#222222]">
@@ -2732,13 +3508,29 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           <TouchableOpacity
             onPress={() => {
               setShowSettingsModal(false);
-              handleEndFirstInnings(totalRuns, totalWickets, oversDecimal);
+              setCurrentScreen('END_INNINGS_REASON');
             }}
             className="p-4 bg-[#181818] rounded-xl mb-3 flex-row justify-between items-center"
           >
             <Text className="text-white text-sm font-bold">Declare / Conclude Innings</Text>
             <Feather name="chevron-right" size={16} color="#888" />
           </TouchableOpacity>
+          {!isSuperOver && (
+            <TouchableOpacity
+              onPress={() => {
+                setShowSettingsModal(false);
+                const tiedRuns = firstInningsSummary?.totalRuns || 150;
+                handleMatchTied(tiedRuns, totalWickets, `${totalOversMax}.0`);
+              }}
+              className="p-4 bg-[#1a180e] border border-[#eab308]/40 rounded-xl mb-3 flex-row justify-between items-center"
+            >
+              <View className="flex-1 mr-2">
+                <Text className="text-[#eab308] text-sm font-bold">Simulate Match Tied (Super Over)</Text>
+                <Text className="text-[#888888] text-xs mt-0.5">Quickly jump to Super Over flow</Text>
+              </View>
+              <Ionicons name="flash" size={16} color="#eab308" />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             onPress={() => {
               setShowSettingsModal(false);
@@ -3132,6 +3924,73 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     </Modal>
   );
 
+  // Universal Player Picker Modal
+  const renderPlayerPickerModal = () => {
+    if (!pickerConfig) return null;
+    return (
+      <Modal visible={!!pickerConfig} transparent animationType="slide">
+        <View className="flex-1 bg-black/75 justify-end">
+          <View className="bg-[#121212] border-t border-[#222222] rounded-t-3xl max-h-[75%] p-5">
+            <View className="flex-row justify-between items-center mb-4 pb-3 border-b border-[#222222]">
+              <View>
+                <Text className="text-white text-lg font-bold">{pickerConfig.title}</Text>
+                <Text className="text-[#888888] text-xs">
+                  {pickerConfig.team} Playing XI
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setPickerConfig(null)} className="p-1">
+                <Feather name="x" size={22} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
+              {pickerConfig.players.map((p) => {
+                const isSelected = p.id === pickerConfig.currentId;
+                const isRestricted = pickerConfig.restrictedIds?.includes(p.id) || pickerConfig.restrictedIds?.includes(p.name);
+
+                return (
+                  <TouchableOpacity
+                    key={p.id}
+                    disabled={isRestricted}
+                    onPress={() => {
+                      pickerConfig.onSelect(p.id);
+                      setPickerConfig(null);
+                    }}
+                    className={`flex-row items-center p-3 rounded-xl mb-2 ${
+                      isRestricted
+                        ? 'bg-[#181818] border border-[#2a2a2a] opacity-40'
+                        : isSelected
+                        ? 'bg-[#1a2e1d] border border-[#23c55e]'
+                        : 'bg-[#181818] border border-[#222222]'
+                    }`}
+                  >
+                    <Image source={{ uri: p.img }} className="w-9 h-9 rounded-full mr-3 bg-[#222222]" />
+                    <View className="flex-1">
+                      <Text className={`text-sm font-bold ${isRestricted ? 'text-[#777777]' : 'text-white'}`}>
+                        {p.name}
+                      </Text>
+                      <Text className="text-[#888888] text-xs">
+                        {p.role || 'Player'} {p.style ? `• ${p.style}` : ''}
+                      </Text>
+                      {isRestricted && (
+                        <Text className="text-[#ef4444] text-[10px] mt-0.5">
+                          {pickerConfig.restrictionReason || 'Unavailable for selection'}
+                        </Text>
+                      )}
+                    </View>
+                    {isSelected && !isRestricted && (
+                      <Feather name="check" size={18} color="#23c55e" />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   // =========================================================================
   // MAIN ROUTING
   // =========================================================================
@@ -3150,6 +4009,9 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       {currentScreen === 'END_INNINGS_REASON' && renderEndInningsReasonScreen()}
       {currentScreen === 'INNINGS_SUMMARY' && renderInningsSummaryScreen()}
       {currentScreen === 'SECOND_INNINGS_START' && renderSecondInningsStartScreen()}
+      {currentScreen === 'MATCH_TIED' && renderMatchTiedScreen()}
+      {currentScreen === 'SUPER_OVER_SETUP' && renderSuperOverSetupScreen()}
+      {currentScreen === 'SUPER_OVER_TIED' && renderSuperOverTiedScreen()}
       {currentScreen === 'MATCH_RESULT' && renderMatchResultScreen()}
 
       {renderSettingsModal()}
@@ -3160,6 +4022,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       {renderByeDrawer()}
       {renderLegByeDrawer()}
       {renderExtrasDrawer()}
+      {renderPlayerPickerModal()}
     </SafeAreaView>
   );
 }
