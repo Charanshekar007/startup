@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -9,52 +9,95 @@ export default function HomeScreen() {
   const navigation = useNavigation(); // <-- HOOK ADDED
   const { activeSport } = useAuthStore();
   const [activeTab, setActiveTab] = useState('FOR_YOU'); // Defaulting to FOR_YOU to match Image 2
+  const [feedPosts, setFeedPosts] = useState([]);
+  const [trendingVideos, setTrendingVideos] = useState([]);
+  const [userLocation, setUserLocation] = useState('Loading...');
+  // Widget data states
+  const [playerToWatch, setPlayerToWatch] = useState(null);
+  const [recentPerformance, setRecentPerformance] = useState(null);
+  const [upcomingMatch, setUpcomingMatch] = useState(null);
+  const [recommendedTeam, setRecommendedTeam] = useState(null);
 
   // --- UI COLORS ---
   const colors = {
     bg: '#0a0a0a',
     card: '#161616',
     primary: '#2ecc71',
-    text: '#ffffff',  
+    text: '#ffffff',
     subText: '#888888',
     border: '#222222',
     accent: '#1e3a29' // Subtle green background for tags
   };
 
-  // --- MOCK DATA: GLOBAL FEED ---
-  const feedPosts = [
-    {
-      id: '1',
-      name: 'Arjun Reddy',
-      username: '@arjunreddy07',
-      sport: 'Cricket',
-      location: 'Hyderabad, India',
-      time: '2h',
-      caption: 'Match day! Nothing feels better than doing what you love. 💚🏏',
-      image: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
-      likes: 128,
-      comments: 24,
-    },
-    {
-      id: '2',
-      name: 'Sneha Iyer',
-      username: '@snehaiyer11',
-      sport: 'Football',
-      location: 'Bengaluru, India',
-      time: '4h',
-      caption: 'Training hard today for a stronger tomorrow. One step at a time. ⚽✨',
-      image: 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
-      likes: 96,
-      comments: 18,
-    }
-  ];
+  // Fetch data on component load
+  useEffect(() => {
+    const fetchHomeData = async () => {
+      try {
+        // Fetch feed posts
+        const feedResponse = await fetch('/api/home/feed');
+        if (feedResponse.ok) {
+          const feedData = await feedResponse.json();
+          setFeedPosts(feedData);
+        }
 
-  // --- MOCK DATA: TRENDING (FOR YOU) ---
-  const trendingVideos = [
-    { id: 't1', title: "Kohli's century powers India to victory", time: '2h ago', views: '12K views', image: 'https://images.unsplash.com/photo-1624526267942-ab0f0b7148eb?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80' },
-    { id: 't2', title: "Mumbai win the T20 Championship 2025", time: '5h ago', views: '18K views', image: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80' },
-    { id: 't3', title: "Top 5 finishes of the IPL 2025", time: '1d ago', views: '25K views', image: 'https://images.unsplash.com/photo-1593341646782-e0b495cff86d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80' },
-  ];
+        // Fetch trending videos
+        const trendingResponse = await fetch('/api/home/trending');
+        if (trendingResponse.ok) {
+          const trendingData = await trendingResponse.json();
+          setTrendingVideos(trendingData);
+        }
+
+        // Fetch player to watch
+        const playerResponse = await fetch('/api/home/player-to-watch');
+        if (playerResponse.ok) {
+          const playerData = await playerResponse.json();
+          setPlayerToWatch(playerData);
+        }
+
+        // Fetch recent performance
+        const performanceResponse = await fetch('/api/home/recent-performance');
+        if (performanceResponse.ok) {
+          const performanceData = await performanceResponse.json();
+          setRecentPerformance(performanceData);
+        }
+
+        // Fetch upcoming match
+        const matchResponse = await fetch('/api/home/upcoming-match');
+        if (matchResponse.ok) {
+          const matchData = await matchResponse.json();
+          setUpcomingMatch(matchData);
+        }
+
+        // Fetch recommended team
+        const teamResponse = await fetch('/api/home/recommended-team');
+        if (teamResponse.ok) {
+          const teamData = await teamResponse.json();
+          setRecommendedTeam(teamData);
+        }
+
+        // Try to get user location (simplified - in real app would use Geolocation API)
+        // For now, we'll set a placeholder that indicates real location would be fetched
+        setUserLocation('Fetching location...');
+        // In a real implementation, you would use:
+        // navigator.geolocation.getCurrentPosition(
+        //   position => {
+        //     // Reverse geocode latitude/longitude to get location name
+        //     setUserLocation('Detected Location'); // Placeholder
+        //   },
+        //   error => {
+        //     console.error('Error getting location:', error);
+        //     setUserLocation('Location unavailable');
+        //   }
+        // );
+      } catch (error) {
+        console.error('Error fetching home data:', error);
+        // Keep empty states on error
+        setUserLocation('Location unavailable');
+      }
+    };
+
+    fetchHomeData();
+  }, [activeSport]); // Refetch when activeSport changes
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
@@ -68,7 +111,7 @@ export default function HomeScreen() {
 
         <TouchableOpacity style={[styles.locationPill, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Feather name="map-pin" size={12} color={colors.primary} />
-          <Text style={[styles.locationText, { color: colors.text }]}>Hyderabad</Text>
+          <Text style={[styles.locationText, { color: colors.text }]}>{userLocation || 'Current Location'}</Text>
           <Feather name="chevron-down" size={14} color={colors.subText} />
         </TouchableOpacity>
 
@@ -177,7 +220,7 @@ export default function HomeScreen() {
              TAB 2: FOR YOU (PERSONALIZED CRICKET)
           ========================================== */
           <View style={styles.forYouContainer}>
-            
+
             {/* For You Header */}
             <View style={styles.forYouHeader}>
               <View>
@@ -198,38 +241,48 @@ export default function HomeScreen() {
               <Text style={[styles.widgetTitle, { color: colors.primary }]}>Player to Watch</Text>
             </View>
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.playerTopRow}>
-                <Image source={{uri: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80'}} style={styles.playerImage} />
-                <View style={styles.playerInfo}>
-                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                    <Text style={[styles.playerName, { color: colors.text }]}>Shubman Gill </Text>
-                    <Feather name="check-circle" size={14} color={colors.primary} />
+              {/* Player data will be fetched from API */}
+              {playerToWatch ? (
+                <>
+                  <View style={styles.playerTopRow}>
+                    <Image source={{uri: playerToWatch.image || ''}} style={styles.playerImage} />
+                    <View style={styles.playerInfo}>
+                      <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                        <Text style={[styles.playerName, { color: colors.text }]}>{playerToWatch.name}</Text>
+                        <Feather name="check-circle" size={14} color={colors.primary} />
+                      </View>
+                      <Text style={[styles.playerSub, { color: colors.subText }]}>{playerToWatch.role}</Text>
+                      <Text style={[styles.playerDesc, { color: colors.subText }]}>{playerToWatch.description}</Text>
+                    </View>
                   </View>
-                  <Text style={[styles.playerSub, { color: colors.subText }]}>Top Order Batter • Team India</Text>
-                  <Text style={[styles.playerDesc, { color: colors.subText }]}>In exceptional form this season.</Text>
+                  <View style={styles.statsRow}>
+                    <View style={styles.statBox}>
+                      <Text style={[styles.statLabel, { color: colors.subText }]}>Matches</Text>
+                      <Text style={[styles.statValue, { color: colors.text }]}>{playerToWatch.matches}</Text>
+                    </View>
+                    <View style={styles.statBox}>
+                      <Text style={[styles.statLabel, { color: colors.subText }]}>Runs</Text>
+                      <Text style={[styles.statValue, { color: colors.primary }]}>{playerToWatch.runs}</Text>
+                    </View>
+                    <View style={styles.statBox}>
+                      <Text style={[styles.statLabel, { color: colors.subText }]}>Avg</Text>
+                      <Text style={[styles.statValue, { color: colors.primary }]}>{playerToWatch.average}</Text>
+                    </View>
+                    <View style={styles.statBox}>
+                      <Text style={[styles.statLabel, { color: colors.subText }]}>SR</Text>
+                      <Text style={[styles.statValue, { color: colors.primary }]}>{playerToWatch.strikeRate}</Text>
+                    </View>
+                    <TouchableOpacity style={[styles.outlineBtn, { borderColor: colors.primary }]}>
+                      <Text style={[styles.outlineBtnText, { color: colors.primary }]}>View Profile</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                /* Loading state */
+                <View style={{ padding: 24 }}>
+                  <Text style={{ textAlign: 'center', color: colors.subText }}>Loading player data...</Text>
                 </View>
-              </View>
-              <View style={styles.statsRow}>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statLabel, { color: colors.subText }]}>Matches</Text>
-                  <Text style={[styles.statValue, { color: colors.text }]}>12</Text>
-                </View>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statLabel, { color: colors.subText }]}>Runs</Text>
-                  <Text style={[styles.statValue, { color: colors.primary }]}>842</Text>
-                </View>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statLabel, { color: colors.subText }]}>Avg</Text>
-                  <Text style={[styles.statValue, { color: colors.primary }]}>70.16</Text>
-                </View>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statLabel, { color: colors.subText }]}>SR</Text>
-                  <Text style={[styles.statValue, { color: colors.primary }]}>94.3</Text>
-                </View>
-                <TouchableOpacity style={[styles.outlineBtn, { borderColor: colors.primary }]}>
-                  <Text style={[styles.outlineBtnText, { color: colors.primary }]}>View Profile</Text>
-                </TouchableOpacity>
-              </View>
+              )}
             </View>
 
             {/* --- WIDGET 2: Recent Performance --- */}
@@ -238,20 +291,30 @@ export default function HomeScreen() {
               <Text style={[styles.viewAllText, { color: colors.subText }]}>View all</Text>
             </View>
             <View style={[styles.card, styles.rowCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Image source={{uri: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80'}} style={styles.perfImage} />
-              <View style={styles.perfInfo}>
-                <Text style={[styles.playerName, { color: colors.text }]}>Shubman Gill</Text>
-                <Text style={[styles.perfScore, { color: colors.primary }]}>112 (98)</Text>
-                <Text style={[styles.playerSub, { color: colors.subText }]}>vs Australia</Text>
-                <Text style={[styles.playerSub, { color: colors.subText, fontSize: 11 }]}>ODI Series • 2d ago</Text>
-              </View>
-              <View style={styles.perfResult}>
-                <Text style={[styles.resultText, { color: colors.primary }]}>Team India won</Text>
-                <Text style={[styles.resultSub, { color: colors.subText }]}>by 36 runs</Text>
-                <View style={[styles.tagPill, { backgroundColor: colors.accent }]}>
-                  <Text style={[styles.tagText, { color: colors.primary }]}>Player of the Match</Text>
+              {/* Recent performance data will be fetched from API */}
+              {recentPerformance ? (
+                <>
+                  <Image source={{uri: recentPerformance.image || ''}} style={styles.perfImage} />
+                  <View style={styles.perfInfo}>
+                    <Text style={[styles.playerName, { color: colors.text }]}>{recentPerformance.playerName}</Text>
+                    <Text style={[styles.perfScore, { color: colors.primary }]}>{recentPerformance.score}</Text>
+                    <Text style={[styles.playerSub, { color: colors.subText }]}>{recentPerformance.opponent}</Text>
+                    <Text style={[styles.playerSub, { color: colors.subText, fontSize: 11 }]}>{recentPerformance.matchInfo}</Text>
+                  </View>
+                  <View style={styles.perfResult}>
+                    <Text style={[styles.resultText, { color: colors.primary }]}>{recentPerformance.result}</Text>
+                    <Text style={[styles.resultSub, { color: colors.subText }]}>{recentPerformance.margin}</Text>
+                    <View style={[styles.tagPill, { backgroundColor: colors.accent }]}>
+                      <Text style={[styles.tagText, { color: colors.primary }]}>{recentPerformance.award}</Text>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                /* Loading state */
+                <View style={{ padding: 24 }}>
+                  <Text style={{ textAlign: 'center', color: colors.subText }}>Loading performance data...</Text>
                 </View>
-              </View>
+              )}
             </View>
 
             {/* --- WIDGET 3: Upcoming Match --- */}
@@ -260,26 +323,42 @@ export default function HomeScreen() {
               <Text style={[styles.viewAllText, { color: colors.subText }]}>View all</Text>
             </View>
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.matchTop}>
-                <Text style={[styles.matchSeries, { color: colors.subText }]}>ODI Series • 1st ODI</Text>
-              </View>
-              <View style={styles.matchTeamsRow}>
-                <View style={styles.teamSide}>
-                  <View style={styles.mockLogoTeamA}><MaterialCommunityIcons name="cricket" size={24} color="#fff"/></View>
-                  <Text style={[styles.teamName, { color: colors.text }]}>India</Text>
-                  <Text style={[styles.teamSub, { color: colors.subText }]}>Men</Text>
+              {/* Upcoming match data will be fetched from API */}
+              {upcomingMatch ? (
+                <>
+                  <View style={styles.matchTop}>
+                    <Text style={[styles.matchSeries, { color: colors.subText }]}>{upcomingMatch.series}</Text>
+                  </View>
+                  <View style={styles.matchTeamsRow}>
+                    <View style={styles.teamSide}>
+                      {/* Team A logo - would come from API */}
+                      <View style={{width: 40, height: 40, borderRadius: 20, backgroundColor: '#3498db', justifyContent: 'center', alignItems: 'center', marginBottom: 8}}>
+                        {upcomingMatch.teamA.initial || 'A'}
+                      </View>
+                      <Text style={[styles.teamName, { color: colors.text }]}>{upcomingMatch.teamA.name}</Text>
+                      <Text style={[styles.teamSub, { color: colors.subText }]}>{upcomingMatch.teamA.gender}</Text>
+                    </View>
+                    <View style={styles.matchCenter}>
+                      <Text style={[styles.vsText, { color: colors.text }]}>VS</Text>
+                      <Text style={[styles.matchTime, { color: colors.subText }]}>{upcomingMatch.time}</Text>
+                      <Text style={[styles.matchTime, { color: colors.subText }]}>{upcomingMatch.venue}</Text>
+                    </View>
+                    <View style={styles.teamSide}>
+                      <Text style={[styles.teamName, { color: colors.text }]}>{upcomingMatch.teamB.name}</Text>
+                      <Text style={[styles.teamSub, { color: colors.subText }]}>{upcomingMatch.teamB.gender}</Text>
+                      {/* Team B logo - would come from API */}
+                      <View style={{width: 40, height: 40, borderRadius: 20, backgroundColor: '#e74c3c', justifyContent: 'center', alignItems: 'center', marginBottom: 8}}>
+                        {upcomingMatch.teamB.initial || 'B'}
+                      </View>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                /* Loading state */
+                <View style={{ padding: 24 }}>
+                  <Text style={{ textAlign: 'center', color: colors.subText }}>Loading match data...</Text>
                 </View>
-                <View style={styles.matchCenter}>
-                  <Text style={[styles.vsText, { color: colors.text }]}>VS</Text>
-                  <Text style={[styles.matchTime, { color: colors.subText }]}>Tomorrow • 2:00 PM</Text>
-                  <Text style={[styles.matchTime, { color: colors.subText }]}>Hyderabad</Text>
-                </View>
-                <View style={styles.teamSide}>
-                  <Text style={[styles.teamName, { color: colors.text }]}>England</Text>
-                  <Text style={[styles.teamSub, { color: colors.subText }]}>Men</Text>
-                  <View style={styles.mockLogoTeamB}><MaterialCommunityIcons name="shield-star-outline" size={24} color="#fff"/></View>
-                </View>
-              </View>
+              )}
             </View>
 
             {/* --- WIDGET 4: Recommended Team --- */}
@@ -288,21 +367,34 @@ export default function HomeScreen() {
               <Text style={[styles.viewAllText, { color: colors.subText }]}>View all</Text>
             </View>
             <View style={[styles.card, styles.teamRowCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.srhLogo}><Text style={{color: '#fff', fontWeight: 'bold'}}>SRH</Text></View>
-              <View style={styles.teamInfo}>
-                <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                  <Text style={[styles.playerName, { color: colors.text }]}>Sunrisers Hyderabad </Text>
-                  <Feather name="check-circle" size={14} color={colors.primary} />
+              {/* Recommended team data will be fetched from API */}
+              {recommendedTeam ? (
+                <>
+                  {/* Team logo - would come from API */}
+                  <View style={{width: 50, height: 50, borderRadius: 25, backgroundColor: recommendedTeam.logoColor || '#d35400', justifyContent: 'center', alignItems: 'center', marginRight: 16}}>
+                    {recommendedTeam.initials || 'Team'}
+                  </View>
+                  <View style={styles.teamInfo}>
+                    <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                      <Text style={[styles.playerName, { color: colors.text }]}>{recommendedTeam.name}</Text>
+                      <Feather name="check-circle" size={14} color={colors.primary} />
+                    </View>
+                    <Text style={[styles.playerSub, { color: colors.subText }]}>{recommendedTeam.description}</Text>
+                    <Text style={[styles.playerSub, { color: colors.subText, fontSize: 12, marginTop: 2 }]}>{recommendedTeam.details}</Text>
+                  </View>
+                  <View style={styles.followAction}>
+                    <TouchableOpacity style={[styles.outlineBtn, { borderColor: colors.primary }]}>
+                      <Text style={[styles.outlineBtnText, { color: colors.primary }]}>Follow</Text>
+                    </TouchableOpacity>
+                    <Text style={[styles.followersText, { color: colors.subText }]}>{recommendedTeam.followers}</Text>
+                  </View>
+                </>
+              ) : (
+                /* Loading state */
+                <View style={{ padding: 24 }}>
+                  <Text style={{ textAlign: 'center', color: colors.subText }}>Loading team data...</Text>
                 </View>
-                <Text style={[styles.playerSub, { color: colors.subText }]}>T20 Franchise</Text>
-                <Text style={[styles.playerSub, { color: colors.subText, fontSize: 12, marginTop: 2 }]}>Strong squad for this season.</Text>
-              </View>
-              <View style={styles.followAction}>
-                <TouchableOpacity style={[styles.outlineBtn, { borderColor: colors.primary }]}>
-                  <Text style={[styles.outlineBtnText, { color: colors.primary }]}>Follow</Text>
-                </TouchableOpacity>
-                <Text style={[styles.followersText, { color: colors.subText }]}>28K Followers</Text>
-              </View>
+              )}
             </View>
 
             {/* --- WIDGET 5: Trending in Cricket --- */}
@@ -311,18 +403,26 @@ export default function HomeScreen() {
               <Text style={[styles.viewAllText, { color: colors.subText }]}>View all</Text>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.trendingScroll}>
-              {trendingVideos.map((video) => (
-                <View key={video.id} style={styles.trendingCard}>
-                  <View style={styles.trendingImageContainer}>
-                    <Image source={{uri: video.image}} style={styles.trendingImage} />
-                    <View style={styles.playIconOverlay}>
-                      <Feather name="play" size={16} color={colors.primary} />
+              {/* Trending videos data will be fetched from API */}
+              {trendingVideos.length > 0 ? (
+                trendingVideos.map((video) => (
+                  <View key={video.id} style={styles.trendingCard}>
+                    <View style={styles.trendingImageContainer}>
+                      <Image source={{uri: video.image || ''}} style={styles.trendingImage} />
+                      <View style={styles.playIconOverlay}>
+                        <Feather name="play" size={16} color={colors.primary} />
+                      </View>
                     </View>
+                    <Text style={[styles.trendingTitle, { color: colors.text }]} numberOfLines={2}>{video.title}</Text>
+                    <Text style={[styles.trendingMeta, { color: colors.subText }]}>{video.time} • {video.views}</Text>
                   </View>
-                  <Text style={[styles.trendingTitle, { color: colors.text }]} numberOfLines={2}>{video.title}</Text>
-                  <Text style={[styles.trendingMeta, { color: colors.subText }]}>{video.time} • {video.views}</Text>
+                ))
+              ) : (
+                /* Loading state */
+                <View style={{ padding: 24 }}>
+                  <Text style={{ textAlign: 'center', color: colors.subText }}>Loading trending videos...</Text>
                 </View>
-              ))}
+              )}
             </ScrollView>
 
           </View>

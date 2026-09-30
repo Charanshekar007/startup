@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, SafeAreaView } from 'react-native';
 // Added MaterialIcons here to fix the crash!
-import { Feather, MaterialCommunityIcons, Ionicons, MaterialIcons } from '@expo/vector-icons'; 
+import { Feather, MaterialCommunityIcons, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useMatches } from '../context/MatchContext';
 
 const { width } = Dimensions.get('window');
@@ -18,17 +18,57 @@ const theme = {
 };
 
 // ==========================================
-// MOCK DATA
+// REAL DATA - FETCHED FROM BACKEND
 // ==========================================
-const TEAM_A = { name: 'Falcons CC', logo: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff' };
-const TEAM_B = { name: 'Warriors XI', logo: 'https://ui-avatars.com/api/?name=WX&background=b9770e&color=fff' };
+const [teamA, setTeamA] = useState({ name: '', logo: '' });
+const [teamB, setTeamB] = useState({ name: '', logo: '' });
+const [playersA, setPlayersA] = useState([]);
+const [isLoading, setIsLoading] = useState(true);
 
-const PLAYERS_A = [
-  { id: '1', name: 'Rohit Sharma (C)', role: 'Batter', img: 'https://ui-avatars.com/api/?name=RS&background=222&color=fff' },
-  { id: '2', name: 'Arjun Reddy', role: 'All Rounder', img: 'https://ui-avatars.com/api/?name=AR&background=222&color=fff' },
-  { id: '3', name: 'Vikram Singh', role: 'Batter', img: 'https://ui-avatars.com/api/?name=VS&background=222&color=fff' },
-  { id: '4', name: 'Karthik Nair', role: 'WK Batter', img: 'https://ui-avatars.com/api/?name=KN&background=222&color=fff' },
-];
+// Fetch initial data for team creation
+useEffect(() => {
+  const fetchInitialData = async () => {
+    try {
+      // Fetch default teams (in a real app, these might come from user's teams or popular teams)
+      const teamsResponse = await fetch('/api/teams/default');
+      if (teamsResponse.ok) {
+        const teamsData = await teamsResponse.json();
+        if (teamsData.length >= 2) {
+          setTeamA(teamsData[0]);
+          setTeamB(teamsData[1]);
+        } else {
+          // Fallback if API doesn't return enough teams
+          setTeamA({ name: 'Team A', logo: '' });
+          setTeamB({ name: 'Team B', logo: '' });
+        }
+      } else {
+        // Fallback if API fails
+        setTeamA({ name: 'Team A', logo: '' });
+        setTeamB({ name: 'Team B', logo: '' });
+      }
+
+      // Fetch players for team selection
+      const playersResponse = await fetch('/api/players/suggestions');
+      if (playersResponse.ok) {
+        const playersData = await playersResponse.json();
+        setPlayersA(playersData);
+      } else {
+        // Fallback if API fails
+        setPlayersA([]);
+      }
+    } catch (error) {
+      console.error('Error fetching initial data:', error);
+      // Set fallback values
+      setTeamA({ name: 'Team A', logo: '' });
+      setTeamB({ name: 'Team B', logo: '' });
+      setPlayersA([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  fetchInitialData();
+}, []); // Empty deps array means run once on mount
 
 // Added { navigation } prop to switch tabs at the end
 export default function CreateScreen({ navigation }) {
@@ -47,11 +87,11 @@ export default function CreateScreen({ navigation }) {
   // Function to save the match and move to the live screen
   const handleStartMatch = () => {
     const newMatchData = {
-      teamA: TEAM_A.name,
-      teamB: TEAM_B.name,
+      teamA: teamA.name,
+      teamB: teamB.name,
       format: matchFormat,
       type: matchType,
-      tossWinner: tossWinner === 'A' ? TEAM_A.name : TEAM_B.name,
+      tossWinner: tossWinner === 'A' ? teamA.name : teamB.name,
       decision: tossDecision,
       status: 'Live',
       date: new Date().toLocaleDateString(),
@@ -63,6 +103,11 @@ export default function CreateScreen({ navigation }) {
     // Transition to the final "Match Started" screen
     setActiveStep(7);
   };
+
+  // State for form fields that would normally come from selection screens
+  const [venue, setVenue] = useState('');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
 
   // ==========================================
   // SHARED COMPONENTS
@@ -110,7 +155,15 @@ export default function CreateScreen({ navigation }) {
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}>
         <TouchableOpacity style={styles.featuredCard} onPress={() => setActiveStep(1)} activeOpacity={0.9}>
-          <Image source={{ uri: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80' }} style={styles.featuredBg} />
+          {/* Use a placeholder or team logo if available */}
+          <Image
+            source={{
+              uri: isLoading
+                ? 'https://via.placeholder.com/800x400?text=Create+Match'
+                : (teamA.logo || teamB.logo || 'https://via.placeholder.com/800x400?text=Create+Match')
+            }}
+            style={styles.featuredBg}
+          />
           <View style={styles.featuredOverlay}>
             <View>
               <Text style={styles.featuredTitle}>Create Match</Text>
@@ -201,9 +254,9 @@ export default function CreateScreen({ navigation }) {
         </View>
 
         <View style={styles.listSettings}>
-          <TouchableOpacity style={styles.listItem}><Text style={styles.listItemLabel}>Venue</Text><View style={styles.listItemRight}><Text style={styles.listItemValue}>Select venue</Text><Feather name="chevron-right" size={16} color={theme.subText}/></View></TouchableOpacity>
-          <TouchableOpacity style={styles.listItem}><Text style={styles.listItemLabel}>Date</Text><View style={styles.listItemRight}><Text style={styles.listItemValue}>Select date</Text><Feather name="chevron-right" size={16} color={theme.subText}/></View></TouchableOpacity>
-          <TouchableOpacity style={styles.listItem}><Text style={styles.listItemLabel}>Time</Text><View style={styles.listItemRight}><Text style={styles.listItemValue}>Select time</Text><Feather name="chevron-right" size={16} color={theme.subText}/></View></TouchableOpacity>
+          <TouchableOpacity style={styles.listItem}><Text style={styles.listItemLabel}>Venue</Text><View style={styles.listItemRight}><Text style={styles.listItemValue}>{venue || 'Select venue'}</Text><Feather name="chevron-right" size={16} color={theme.subText}/></View></TouchableOpacity>
+          <TouchableOpacity style={styles.listItem}><Text style={styles.listItemLabel}>Date</Text><View style={styles.listItemRight}><Text style={styles.listItemValue}>{date || 'Select date'}</Text><Feather name="chevron-right" size={16} color={theme.subText}/></View></TouchableOpacity>
+          <TouchableOpacity style={styles.listItem}><Text style={styles.listItemLabel}>Time</Text><View style={styles.listItemRight}><Text style={styles.listItemValue}>{time || 'Select time'}</Text><Feather name="chevron-right" size={16} color={theme.subText}/></View></TouchableOpacity>
           <TouchableOpacity style={styles.listItem}><Text style={styles.listItemLabel}>Overs</Text><View style={styles.listItemRight}><Text style={styles.listItemValue}>20 Overs</Text><Feather name="chevron-right" size={16} color={theme.subText}/></View></TouchableOpacity>
           <TouchableOpacity style={styles.listItem}><Text style={styles.listItemLabel}>Players / Squads</Text><View style={styles.listItemRight}><Text style={styles.listItemValue}>Select players</Text><Feather name="chevron-right" size={16} color={theme.subText}/></View></TouchableOpacity>
           <TouchableOpacity style={[styles.listItem, { borderBottomWidth: 0 }]}><Text style={styles.listItemLabel}>Match Rules</Text><View style={styles.listItemRight}><Text style={styles.listItemValue}>Set match rules</Text><Feather name="chevron-right" size={16} color={theme.subText}/></View></TouchableOpacity>
@@ -225,22 +278,22 @@ export default function CreateScreen({ navigation }) {
 
         <View style={styles.vsContainer}>
           <View style={styles.vsTeam}>
-            <Image source={{uri: TEAM_A.logo}} style={styles.vsLogo} />
-            <Text style={styles.vsName}>{TEAM_A.name}</Text>
+            <Image source={{uri: teamA.logo || ''}} style={styles.vsLogo} />
+            <Text style={styles.vsName}>{teamA.name || 'Team A'}</Text>
           </View>
           <Text style={styles.vsText}>VS</Text>
           <View style={styles.vsTeam}>
-            <Image source={{uri: TEAM_B.logo}} style={styles.vsLogo} />
-            <Text style={styles.vsName}>{TEAM_B.name}</Text>
+            <Image source={{uri: teamB.logo || ''}} style={styles.vsLogo} />
+            <Text style={styles.vsName}>{teamB.name || 'Team B'}</Text>
           </View>
         </View>
 
         <View style={styles.reviewList}>
           <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Format</Text><Text style={styles.reviewValue}>{matchFormat}</Text></View>
           <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Match Type</Text><Text style={styles.reviewValue}>{matchType}</Text></View>
-          <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Venue</Text><Text style={[styles.reviewValue, { textAlign: 'right', flex: 1, paddingLeft: 20 }]}>Rajiv Cricket Ground, Hyderabad</Text></View>
-          <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Date</Text><Text style={styles.reviewValue}>18 May 2026</Text></View>
-          <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Time</Text><Text style={styles.reviewValue}>04:00 PM</Text></View>
+          <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Venue</Text><Text style={[styles.reviewValue, { textAlign: 'right', flex: 1, paddingLeft: 20 }]}>{venue || 'Select venue'}</Text></View>
+          <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Date</Text><Text style={styles.reviewValue}>{date || 'Select date'}</Text></View>
+          <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Time</Text><Text style={styles.reviewValue}>{time || 'Select time'}</Text></View>
           <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Overs</Text><Text style={styles.reviewValue}>20 Overs</Text></View>
           <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Players</Text><Text style={styles.reviewValue}>11 vs 11</Text></View>
           <View style={[styles.reviewItem, { borderBottomWidth: 0 }]}><Text style={styles.reviewLabel}>Match Rules</Text><Text style={styles.reviewValue}>Standard Cricket Rules</Text></View>
@@ -422,10 +475,10 @@ export default function CreateScreen({ navigation }) {
 
         <View style={[styles.reviewList, { width: '100%' }]}>
           <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Format</Text><Text style={styles.reviewValue}>{matchFormat}</Text></View>
-          <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Venue</Text><Text style={[styles.reviewValue, { textAlign: 'right', flex: 1, paddingLeft: 20 }]}>Rajiv Cricket Ground, Hyderabad</Text></View>
-          <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Date & Time</Text><Text style={styles.reviewValue}>18 May 2026, 04:00 PM</Text></View>
+          <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Venue</Text><Text style={[styles.reviewValue, { textAlign: 'right', flex: 1, paddingLeft: 20 }]}>{venue || 'Select venue'}</Text></View>
+          <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Date & Time</Text><Text style={styles.reviewValue}>{date && time ? `${date}, ${time}` : 'Select date and time'}</Text></View>
           <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Overs</Text><Text style={styles.reviewValue}>20 Overs</Text></View>
-          <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Toss</Text><Text style={styles.reviewValue}>{tossWinner === 'A' ? TEAM_A.name : TEAM_B.name} won the toss</Text></View>
+          <View style={styles.reviewItem}><Text style={styles.reviewLabel}>Toss</Text><Text style={styles.reviewValue}>{tossWinner === 'A' ? teamA.name : teamB.name} won the toss</Text></View>
           <View style={[styles.reviewItem, { borderBottomWidth: 0 }]}><Text style={styles.reviewLabel}>Decision</Text><Text style={styles.reviewValue}>{tossDecision} First</Text></View>
         </View>
       </ScrollView>

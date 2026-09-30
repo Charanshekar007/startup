@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Dimensions, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -18,48 +18,82 @@ const theme = {
 };
 
 // ==========================================
-// MOCK DATA
+// REAL DATA - FETCHED FROM BACKEND
 // ==========================================
-const DISCOVER_CATEGORIES = [
-  { id: '1', title: 'Players', subtitle: 'Find cricketers', icon: 'account-outline' },
-  { id: '2', title: 'Teams', subtitle: 'Explore teams', icon: 'account-group-outline' },
-  { id: '3', title: 'Matches', subtitle: 'Live & upcoming', icon: 'calendar-month-outline' },
-  { id: '4', title: 'Tournaments', subtitle: 'Local & global', icon: 'trophy-outline' },
-  { id: '5', title: 'Grounds', subtitle: 'Cricket venues', icon: 'stadium-variant' },
-  { id: '6', title: 'Events', subtitle: 'Cricket events', icon: 'ticket-confirmation-outline' },
-  { id: '7', title: 'Rankings', subtitle: 'Top performers', icon: 'chart-bar' },
-  { id: '8', title: 'Trending', subtitle: "What's hot", icon: 'fire' },
-];
-
-const TRENDING_NOW = [
-  { id: 't1', title: 'KPL Season 7', subtitle: 'Live Now', image: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80', isLive: true },
-  { id: 't2', title: 'Top Batters', subtitle: 'This Month', image: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80' },
-  { id: 't3', title: 'Emerging Players', subtitle: 'To Watch', image: 'https://images.unsplash.com/photo-1593341646782-e0b495cff86d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80' },
-];
-
+const [discoverCategories, setDiscoverCategories] = useState([]);
+const [trendingNow, setTrendingNow] = useState([]);
+const [searchResults, setSearchResults] = useState({
+  players: [],
+  teams: [],
+  matches: [],
+  tournaments: []
+});
 const SEARCH_TABS = ['All', 'Players', 'Teams', 'Matches', 'Tournaments', 'Grounds', 'Events'];
 
-const SEARCH_RESULTS = {
-  players: [
-    { id: 'p1', name: 'Rahul Kumar', role: 'Batter • Right Handed', location: 'Hyderabad, Telangana', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=150&q=80', rating: '4.6' },
-    { id: 'p2', name: 'Rahul Singh', role: 'All Rounder • Right Handed', location: 'Delhi, India', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=150&q=80', rating: '4.3' },
-    { id: 'p3', name: 'Rahul Chaudhary', role: 'Bowler • Left Arm Fast', location: 'Jaipur, Rajasthan', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-4.0.3&auto=format&fit=crop&w=150&q=80', rating: '4.2' },
-  ],
-  teams: [
-    { id: 'tm1', name: 'Rahul Warriors', location: 'Hyderabad, Telangana', logo: 'https://ui-avatars.com/api/?name=RW&background=1e3a29&color=fff' },
-    { id: 'tm2', name: 'Rahul Strikers', location: 'Delhi, India', logo: 'https://ui-avatars.com/api/?name=RS&background=b9770e&color=fff' },
-    { id: 'tm3', name: 'Rahul XI', location: 'Mumbai, Maharashtra', logo: 'https://ui-avatars.com/api/?name=RX&background=c0392b&color=fff' },
-  ],
-  matches: [
-    { 
-      id: 'm1', league: 'Kurukshetra Premier League', venue: 'Tau Devi Lal Stadium, Panchkula',
-      teamA: 'Falcons CC', logoA: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff', scoreA: '186/7', oversA: '32.3 Overs',
-      teamB: 'Warriors XI', logoB: 'https://ui-avatars.com/api/?name=WX&background=8e44ad&color=fff', scoreB: '152/4', oversB: '30.1 Overs' 
+// Fetch data on component load
+useEffect(() => {
+  const fetchDiscoverData = async () => {
+    try {
+      // Fetch categories
+      const categoriesResponse = await fetch('/api/discover/categories');
+      if (categoriesResponse.ok) {
+        const categoriesData = await categoriesResponse.json();
+        setDiscoverCategories(categoriesData);
+      }
+
+      // Fetch trending now
+      const trendingResponse = await fetch('/api/discover/trending');
+      if (trendingResponse.ok) {
+        const trendingData = await trendingResponse.json();
+        setTrendingNow(trendingData);
+      }
+
+      // Initial empty search results
+      setSearchResults({
+        players: [],
+        teams: [],
+        matches: [],
+        tournaments: []
+      });
+    } catch (error) {
+      console.error('Error fetching discover data:', error);
+      // Set empty states on error
+      setDiscoverCategories([]);
+      setTrendingNow([]);
+      setSearchResults({
+        players: [],
+        teams: [],
+        matches: [],
+        tournaments: []
+      });
     }
-  ],
-  tournaments: [
-    { id: 'tr1', name: 'Kurukshetra Premier League', season: 'Season 7 • T20', dates: 'May 10 - Jun 10, 2025', location: 'Panchkula, Haryana', logo: 'https://ui-avatars.com/api/?name=KPL&background=1a1a1a&color=23c55e' }
-  ]
+  };
+
+  fetchDiscoverData();
+}, []);
+
+// Search function
+const handleSearch = async (query, tab) => {
+  if (!query.trim()) {
+    setSearchResults({
+      players: [],
+      teams: [],
+      matches: [],
+      tournaments: []
+    });
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&type=${tab.toLowerCase()}`);
+    if (response.ok) {
+      const results = await response.json();
+      setSearchResults(results);
+    }
+  } catch (error) {
+    console.error('Error searching:', error);
+    // Keep previous results or set empty
+  }
 };
 
 export default function DiscoverScreen() {
@@ -88,11 +122,11 @@ export default function DiscoverScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+
         {/* FAKE SEARCH BAR (Triggers Search State) */}
         <View style={styles.searchSection}>
-          <TouchableOpacity 
-            style={[styles.searchBar, { flex: 1 }]} 
+          <TouchableOpacity
+            style={[styles.searchBar, { flex: 1 }]}
             onPress={() => setIsSearchActive(true)}
             activeOpacity={0.9}
           >
@@ -106,7 +140,7 @@ export default function DiscoverScreen() {
 
         {/* CATEGORY GRID */}
         <View style={styles.gridContainer}>
-          {DISCOVER_CATEGORIES.map((cat) => (
+          {discoverCategories.map((cat) => (
             <TouchableOpacity key={cat.id} style={styles.gridItem}>
               <View style={styles.gridIconContainer}>
                 <MaterialCommunityIcons name={cat.icon} size={28} color={theme.primary} />
@@ -122,9 +156,9 @@ export default function DiscoverScreen() {
           <Text style={styles.sectionTitle}>Trending Now</Text>
           <TouchableOpacity><Text style={styles.viewAllText}>View All</Text></TouchableOpacity>
         </View>
-        
+
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendingScroll}>
-          {TRENDING_NOW.map(item => (
+          {trendingNow.map(item => (
             <TouchableOpacity key={item.id} style={styles.trendingCard}>
               <Image source={{ uri: item.image }} style={styles.trendingImage} />
               <View style={styles.trendingOverlay}>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -15,42 +15,32 @@ const theme = {
   unreadBg: '#0d1f13', // Very subtle green tint for unread
 };
 
-// --- MOCK NOTIFICATIONS ---
-const MOCK_NOTIFICATIONS = [
-  {
-    id: '1', type: 'TEAM_INVITE', unread: true, time: '10m',
-    avatar: 'https://ui-avatars.com/api/?name=TC&background=1e3a29&color=fff',
-    title: 'Team Invitation',
-    message: 'Captain Arjun invited you to join Thunder CC as an All-Rounder.',
-    hasActions: true
-  },
-  {
-    id: '2', type: 'MATCH_ALERT', unread: true, time: '1h',
-    icon: 'whistle', iconColor: '#f39c12',
-    title: 'Match Starting',
-    message: 'Toss update: Thunder CC won the toss and elected to bat first against Warriors XI.',
-  },
-  {
-    id: '3', type: 'LIKE', unread: false, time: '3h',
-    avatar: 'https://randomuser.me/api/portraits/men/44.jpg',
-    title: 'Rahul Kumar',
-    message: 'liked your match highlights video.',
-    postImage: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80'
-  },
-  {
-    id: '4', type: 'FOLLOW', unread: false, time: '1d',
-    avatar: 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
-    title: 'Sneha Iyer',
-    message: 'started following you.',
-    isFollowing: false
-  },
-  {
-    id: '5', type: 'TOURNAMENT', unread: false, time: '2d',
-    icon: 'trophy', iconColor: '#3498db',
-    title: 'Tournament Update',
-    message: 'Kurukshetra Tournament fixtures for the Quarter Finals have been released.',
-  },
-];
+// --- REAL NOTIFICATIONS - FETCHED FROM BACKEND ---
+const [notifications, setNotifications] = useState([]);
+const [isLoading, setIsLoading] = useState(true);
+
+// Fetch notifications on component load
+useEffect(() => {
+  const fetchNotifications = async () => {
+    try {
+      const response = await fetch('/api/notifications');
+      if (response.ok) {
+        const data = await response.json();
+        setNotifications(data);
+      } else {
+        console.error('Failed to fetch notifications');
+        setNotifications([]); // Empty state on error
+      }
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      setNotifications([]); // Empty state on error
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  fetchNotifications();
+}, []); // Empty deps array means run once on mount
 
 export default function NotificationsScreen() {
   const navigation = useNavigation();
@@ -121,8 +111,8 @@ export default function NotificationsScreen() {
       {/* Filter Tabs */}
       <View style={styles.filterTabs}>
         {['All', 'Mentions', 'Matches', 'Teams'].map((f) => (
-          <TouchableOpacity 
-            key={f} 
+          <TouchableOpacity
+            key={f}
             style={[styles.filterTab, filter === f && styles.filterTabActive]}
             onPress={() => setFilter(f)}
           >
@@ -132,7 +122,20 @@ export default function NotificationsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-        {MOCK_NOTIFICATIONS.map(renderNotification)}
+        {isLoading ? (
+          {/* Loading state */}
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: theme.subText, textAlign: 'center' }}>Loading notifications...</Text>
+          </View>
+        ) : notifications.length === 0 ? (
+          {/* Empty state */}
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: theme.subText, textAlign: 'center' }}>No notifications yet</Text>
+          </View>
+        ) : (
+          {/* Render notifications */}
+          {notifications.map(renderNotification)}
+        )}
       </ScrollView>
     </SafeAreaView>
   );
