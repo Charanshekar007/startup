@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
@@ -20,52 +20,150 @@ const theme = {
 };
 
 // ==========================================
-// MOCK DATA
+// REAL DATA - FETCHED FROM BACKEND
 // ==========================================
-const PROFILE = {
-  name: 'Rahul Kumar',
-  username: '@rahulkumar',
-  location: 'Hyderabad, India',
-  role: 'All-Rounder',
-  batting: 'Right-Handed',
-  bowling: 'Right-Arm Medium',
-  avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80',
-  followers: '2.4K',
-  following: '386',
-  posts: '42',
-  experience: 'College • Club • Turf',
-  primaryTeam: 'Falcons CC',
-};
+const [profile, setProfile] = useState({
+  name: '',
+  username: '',
+  location: '',
+  role: '',
+  batting: '',
+  bowling: '',
+  avatar: '',
+  followers: '',
+  following: '',
+  posts: '',
+  experience: '',
+  primaryTeam: '',
+  tournaments: [],
+  achievements: [],
+});
+const [recentPerformance, setRecentPerformance] = useState([]);
+const [formData, setFormData] = useState([]);
+const [matchHistory, setMatchHistory] = useState([]);
+const [postsFeed, setPostsFeed] = useState([]);
+const [isLoading, setIsLoading] = useState(true);
 
-const RECENT_PERFORMANCE = [
-  { id: '1', score: '86*', balls: '52', fours: 7, sixes: 3, vs: 'Royal Strikers', potm: true, time: 'Yesterday', icon: 'cricket-bat' },
-  { id: '2', score: '42', balls: '31', fours: 5, sixes: 1, vs: 'Warriors XI', potm: false, time: '3 days ago', icon: 'cricket-bat' },
-  { id: '3', score: '3/24', balls: '4', overs: '4 Overs', vs: 'Titans CC', potm: false, time: '5 days ago', icon: 'cricket' },
-];
+// Fetch profile data on component load
+useEffect(() => {
+  const fetchProfileData = async () => {
+    try {
+      // Fetch profile data
+      const profileResponse = await fetch('/api/profile');
+      if (profileResponse.ok) {
+        const profileData = await profileResponse.json();
+        setProfile(profileData);
+      } else {
+        console.error('Failed to fetch profile data');
+        setProfile({
+          name: '',
+          username: '',
+          location: '',
+          role: '',
+          batting: '',
+          bowling: '',
+          avatar: '',
+          followers: '',
+          following: '',
+          posts: '',
+          experience: '',
+          primaryTeam: '',
+        });
+      }
 
-const FORM_DATA = [
-  { id: 'f1', score: 86, result: 'W' },
-  { id: 'f2', score: 42, result: 'W' },
-  { id: 'f3', score: 31, result: 'L' },
-  { id: 'f4', score: 74, result: 'W' },
-  { id: 'f5', score: 18, result: 'L' },
-];
+      // Fetch recent performance
+      const perfResponse = await fetch('/api/profile/recent-performance');
+      if (perfResponse.ok) {
+        const perfData = await perfResponse.json();
+        setRecentPerformance(perfData);
+      } else {
+        setRecentPerformance([]);
+      }
 
-const MATCH_HISTORY = [
-  { id: 'm1', format: 'T20', league: 'Kurukshetra T20 • Semi-Final', teamA: 'Falcons CC', logoA: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff', teamB: 'Royal Strikers', logoB: 'https://ui-avatars.com/api/?name=RS&background=b9770e&color=fff', result: 'Won by 6 wickets', myScore: '86*', myBalls: '52', myFours: 7, mySixes: 3, potm: true, time: 'Yesterday' },
-  { id: 'm2', format: 'T20', league: 'Hyderabad Turf League • League', teamA: 'Warriors XI', logoA: 'https://ui-avatars.com/api/?name=WX&background=8e44ad&color=fff', teamB: 'Falcons CC', logoB: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff', result: 'Lost by 3 runs', myScore: '42', myBalls: '31', myFours: 5, mySixes: 1, potm: false, time: '3 days ago' },
-  { id: 'm3', format: 'T20', league: 'Hyderabad Turf League • League', teamA: 'Falcons CC', logoA: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff', teamB: 'Titans CC', logoB: 'https://ui-avatars.com/api/?name=TC&background=2c3e50&color=fff', result: 'Won by 22 runs', myScore: '3/24', myBalls: '4', myFours: 4, mySixes: 0, extraInfo: '4 Overs • 2 Maidens', potm: false, time: '5 days ago' },
-];
+      // Fetch form data
+      const formResponse = await fetch('/api/profile/form');
+      if (formResponse.ok) {
+        const formDataResponse = await formResponse.json();
+        setFormData(formDataResponse);
+      } else {
+        setFormData([]);
+      }
 
-const POSTS_FEED = [
-  { id: 'p1', text: "Big match tonight! 💪\nLet's go Falcons! 🦅🔥", time: '2h', image: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', likes: 128, comments: 24, shares: 12 },
-  { id: 'p2', text: "Happy to contribute to the team's win today. 🙌\nGood team effort all around! 💚", time: '1d', isPerformance: true, likes: 96, comments: 18, shares: 8 },
-  { id: 'p3', text: "Great practice session today!\nAlways working to get better. 🏏", time: '3d', images: [
-    'https://images.unsplash.com/photo-1593341646782-e0b495cff86d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80',
-    'https://images.unsplash.com/photo-1531415074968-036ba1b575da?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80',
-    'https://images.unsplash.com/photo-1624526267942-ab0f0b7148eb?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80'
-  ], likes: 78, comments: 14, shares: 6 }
-];
+      // Fetch match history
+      const matchResponse = await fetch('/api/profile/match-history');
+      if (matchResponse.ok) {
+        const matchData = await matchResponse.json();
+        setMatchHistory(matchData);
+      } else {
+        setMatchHistory([]);
+      }
+
+      // Fetch posts feed
+      const postsResponse = await fetch('/api/profile/posts');
+      if (postsResponse.ok) {
+        const postsData = await postsResponse.json();
+        setPostsFeed(postsData);
+      } else {
+        setPostsFeed([]);
+      }
+
+      // Fetch tournaments
+      const tournamentsResponse = await fetch('/api/profile/tournaments');
+      if (tournamentsResponse.ok) {
+        const tournamentsData = await tournamentsResponse.json();
+        setProfile(prev => ({
+          ...prev,
+          tournaments: tournamentsData
+        }));
+      } else {
+        setProfile(prev => ({
+          ...prev,
+          tournaments: []
+        }));
+      }
+
+      // Fetch achievements
+      const achievementsResponse = await fetch('/api/profile/achievements');
+      if (achievementsResponse.ok) {
+        const achievementsData = await achievementsResponse.json();
+        setProfile(prev => ({
+          ...prev,
+          achievements: achievementsData
+        }));
+      } else {
+        setProfile(prev => ({
+          ...prev,
+          achievements: []
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching profile data:', error);
+      // Set empty states on error
+      setProfile({
+        name: '',
+        username: '',
+        location: '',
+        role: '',
+        batting: '',
+        bowling: '',
+        avatar: '',
+        followers: '',
+        following: '',
+        posts: '',
+        experience: '',
+        primaryTeam: '',
+      });
+      setRecentPerformance([]);
+      setFormData([]);
+      setMatchHistory([]);
+      setPostsFeed([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  fetchProfileData();
+}, []); // Empty deps array means run once on mount
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
@@ -79,7 +177,7 @@ export default function ProfileScreen() {
   // ==========================================
   const renderProfileHeader = () => (
     <View style={styles.profileTopContainer}>
-      
+
       {/* Top Nav */}
       <View style={styles.topNav}>
         <TouchableOpacity onPress={() => navigation.goBack()}><Feather name="chevron-left" size={28} color={theme.text} /></TouchableOpacity>
@@ -93,27 +191,27 @@ export default function ProfileScreen() {
       {/* Profile Info */}
       <View style={styles.profileInfoRow}>
         <View style={styles.avatarWrapper}>
-          <Image source={{ uri: PROFILE.avatar }} style={styles.avatar} />
+          <Image source={{ uri: profile.avatar || '' }} style={styles.avatar} />
         </View>
         <View style={styles.profileDetails}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={styles.nameText}>{PROFILE.name}</Text>
-            <MaterialCommunityIcons name="check-decagram" size={18} color={theme.primary} style={{ marginLeft: 4 }} />
+            <Text style={styles.nameText}>{profile.name || ''}</Text>
+            {profile.username && <MaterialCommunityIcons name="check-decagram" size={18} color={theme.primary} style={{ marginLeft: 4 }} />}
           </View>
-          <Text style={styles.usernameText}>{PROFILE.username}</Text>
+          <Text style={styles.usernameText}>{profile.username || ''}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
             <Feather name="map-pin" size={12} color={theme.subText} />
-            <Text style={styles.locationText}>{PROFILE.location}</Text>
+            <Text style={styles.locationText}>{profile.location || ''}</Text>
           </View>
-          
-          <View style={styles.rolePill}><Text style={styles.rolePillText}>{PROFILE.role}</Text></View>
-          
+
+          <View style={styles.rolePill}><Text style={styles.rolePillText}>{profile.role || ''}</Text></View>
+
           <View style={styles.playStylesRow}>
             <MaterialCommunityIcons name="cricket-bat" size={14} color={theme.subText} />
-            <Text style={styles.playStyleText}>{PROFILE.batting} Batter</Text>
+            <Text style={styles.playStyleText}>{profile.batting || ''} Batter</Text>
             <View style={styles.dotSeparator} />
             <MaterialCommunityIcons name="cricket" size={14} color={theme.subText} />
-            <Text style={styles.playStyleText}>{PROFILE.bowling}</Text>
+            <Text style={styles.playStyleText}>{profile.bowling || ''}</Text>
           </View>
         </View>
       </View>
@@ -133,17 +231,17 @@ export default function ProfileScreen() {
       {/* Stats Row */}
       <View style={styles.statsContainer}>
         <View style={styles.statBox}>
-          <View style={styles.statIconRow}><Feather name="users" size={14} color={theme.subText} /><Text style={styles.statNum}>{PROFILE.followers}</Text></View>
+          <View style={styles.statIconRow}><Feather name="users" size={14} color={theme.subText} /><Text style={styles.statNum}>{profile.followers}</Text></View>
           <Text style={styles.statLabel}>Followers</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statBox}>
-          <View style={styles.statIconRow}><Feather name="user-check" size={14} color={theme.subText} /><Text style={styles.statNum}>{PROFILE.following}</Text></View>
+          <View style={styles.statIconRow}><Feather name="user-check" size={14} color={theme.subText} /><Text style={styles.statNum}>{profile.following}</Text></View>
           <Text style={styles.statLabel}>Following</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statBox}>
-          <View style={styles.statIconRow}><Feather name="file-text" size={14} color={theme.subText} /><Text style={styles.statNum}>{PROFILE.posts}</Text></View>
+          <View style={styles.statIconRow}><Feather name="file-text" size={14} color={theme.subText} /><Text style={styles.statNum}>{profile.posts}</Text></View>
           <Text style={styles.statLabel}>Posts</Text>
         </View>
       </View>
@@ -164,21 +262,21 @@ export default function ProfileScreen() {
   // ==========================================
   const renderOverview = () => (
     <View style={styles.tabContent}>
-      
+
       {/* Cricket Identity Card */}
       <View style={styles.card}>
         <Text style={styles.cardSectionTitle}>CRICKET IDENTITY</Text>
         <View style={styles.identityGrid}>
-          <View style={styles.identityItem}><Text style={styles.idLabel}>Role</Text><Text style={styles.idValue}>{PROFILE.role}</Text></View>
-          <View style={styles.identityItem}><Text style={styles.idLabel}>Batting</Text><Text style={styles.idValue}>{PROFILE.batting}</Text></View>
-          <View style={styles.identityItem}><Text style={styles.idLabel}>Bowling</Text><Text style={styles.idValue}>{PROFILE.bowling}</Text></View>
-          <View style={styles.identityItem}><Text style={styles.idLabel}>Experience</Text><Text style={styles.idValue}>{PROFILE.experience}</Text></View>
+          <View style={styles.identityItem}><Text style={styles.idLabel}>Role</Text><Text style={styles.idValue}>{profile.role || ''}</Text></View>
+          <View style={styles.identityItem}><Text style={styles.idLabel}>Batting</Text><Text style={styles.idValue}>{profile.batting || ''}</Text></View>
+          <View style={styles.identityItem}><Text style={styles.idLabel}>Bowling</Text><Text style={styles.idValue}>{profile.bowling || ''}</Text></View>
+          <View style={styles.identityItem}><Text style={styles.idLabel}>Experience</Text><Text style={styles.idValue}>{profile.experience || ''}</Text></View>
         </View>
         <View style={styles.primaryTeamRow}>
-          <Image source={{uri: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff'}} style={styles.primaryTeamLogo} />
+          <Image source={{uri: profile.primaryTeamLogo || 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff'}} style={styles.primaryTeamLogo} />
           <View>
             <Text style={styles.idLabel}>Primary Team</Text>
-            <Text style={styles.idValue}>{PROFILE.primaryTeam}</Text>
+            <Text style={styles.idValue}>{profile.primaryTeam || ''}</Text>
           </View>
         </View>
       </View>
@@ -189,24 +287,36 @@ export default function ProfileScreen() {
         <TouchableOpacity><Text style={styles.seeAllText}>See All</Text></TouchableOpacity>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, marginBottom: 16 }}>
-        {RECENT_PERFORMANCE.map(perf => (
-          <View key={perf.id} style={styles.perfCard}>
-            <View style={styles.perfTopRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                <Text style={styles.perfScore}>{perf.score}</Text>
-                <Text style={styles.perfBalls}> ({perf.balls})</Text>
-              </View>
-              <View style={styles.perfIconBg}><MaterialCommunityIcons name={perf.icon} size={16} color={theme.subText} /></View>
-            </View>
-            <Text style={styles.perfDetails}>{perf.overs ? perf.overs : `${perf.fours} Fours • ${perf.sixes} Sixes`}</Text>
-            <Text style={styles.perfVs}>vs {perf.vs}</Text>
-            {perf.potm && <View style={styles.potmBadge}><Text style={styles.potmText}>Player of the Match</Text></View>}
-            <View style={styles.perfFooter}>
-              <Text style={styles.perfTime}>{perf.time}</Text>
-              <Feather name="chevron-right" size={16} color={theme.subText} />
-            </View>
+        {isLoading ? (
+          {/* Loading state */}
+          <View style={{ padding: 24 }}>
+            <Text style={{ textAlign: 'center', color: theme.subText }}>Loading performance data...</Text>
           </View>
-        ))}
+        ) : recentPerformance.length === 0 ? (
+          {/* Empty state */}
+          <View style={{ padding: 24 }}>
+            <Text style={{ textAlign: 'center', color: theme.subText }}>No performance data available</Text>
+          </View>
+        ) : (
+          recentPerformance.map(perf => (
+            <View key={perf.id} style={styles.perfCard}>
+              <View style={styles.perfTopRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                  <Text style={styles.perfScore}>{perf.score || ''}</Text>
+                  <Text style={styles.perfBalls}> ({perf.balls || ''})</Text>
+                </View>
+                <View style={styles.perfIconBg}><MaterialCommunityIcons name={perf.icon || 'cricket-bat'} size={16} color={theme.subText} /></View>
+              </View>
+              <Text style={styles.perfDetails}>{perf.overs ? perf.overs : `${perf.fours || 0} Fours • ${perf.sixes || 0} Sixes`}</Text>
+              <Text style={styles.perfVs}>vs {perf.vs || ''}</Text>
+              {perf.potm && <View style={styles.potmBadge}><Text style={styles.potmText}>Player of the Match</Text></View>}
+              <View style={styles.perfFooter}>
+                <Text style={styles.perfTime}>{perf.time || ''}</Text>
+                <Feather name="chevron-right" size={16} color={theme.subText} />
+              </View>
+            </View>
+          ))
+        )}
       </ScrollView>
 
       {/* Form & Teams Grid */}
@@ -215,19 +325,31 @@ export default function ProfileScreen() {
         <View style={[styles.card, { flex: 1, marginRight: 8 }]}>
           <Text style={styles.miniCardTitle}>Form <Text style={{fontWeight:'normal', color:theme.subText}}>(Last 5 Matches)</Text></Text>
           <View style={styles.formChart}>
-            {FORM_DATA.map((data, idx) => {
-              const isWin = data.result === 'W';
-              const barHeight = Math.max((data.score / 100) * 80, 10);
-              return (
-                <View key={data.id} style={styles.formCol}>
-                  <Text style={styles.formScoreText}>{data.score}</Text>
-                  <View style={[styles.formBar, { height: barHeight, backgroundColor: isWin ? theme.primary : theme.danger }]} />
-                  <View style={[styles.formResultBadge, { backgroundColor: isWin ? theme.primaryDark : theme.dangerDark, borderColor: isWin ? theme.primary : theme.danger }]}>
-                    <Text style={[styles.formResultText, { color: isWin ? theme.primary : theme.danger }]}>{data.result}</Text>
+            {isLoading ? (
+              {/* Loading state */}
+              <View style={{ padding: 16 }}>
+                <Text style={{ textAlign: 'center', color: theme.subText }}>Loading form data...</Text>
+              </View>
+            ) : formData.length === 0 ? (
+              {/* Empty state */}
+              <View style={{ padding: 16 }}>
+                <Text style={{ textAlign: 'center', color: theme.subText }}>No form data available</Text>
+              </View>
+            ) : (
+              formData.map((data, idx) => {
+                const isWin = data.result === 'W';
+                const barHeight = Math.max((data.score / 100) * 80, 10);
+                return (
+                  <View key={data.id} style={styles.formCol}>
+                    <Text style={styles.formScoreText}>{data.score || ''}</Text>
+                    <View style={[styles.formBar, { height: barHeight, backgroundColor: isWin ? theme.primary : theme.danger }]} />
+                    <View style={[styles.formResultBadge, { backgroundColor: isWin ? theme.primaryDark : theme.dangerDark, borderColor: isWin ? theme.primary : theme.danger }]}>
+                      <Text style={[styles.formResultText, { color: isWin ? theme.primary : theme.danger }]}>{data.result || ''}</Text>
+                    </View>
                   </View>
-                </View>
-              )
-            })}
+                )
+              })
+            )}
           </View>
         </View>
 
@@ -237,22 +359,43 @@ export default function ProfileScreen() {
             <Text style={styles.miniCardTitle}>Teams</Text>
             <TouchableOpacity><Text style={styles.seeAllText}>See All</Text></TouchableOpacity>
           </View>
-          <View style={styles.teamListRow}>
-            <Image source={{uri: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff'}} style={styles.smallTeamLogo} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.teamListTitle} numberOfLines={1}>Falcons CC</Text>
-              <Text style={styles.teamListSub}>All-Rounder</Text>
+          {isLoading ? (
+            {/* Loading state */}
+            <View style={{ padding: 24 }}>
+              <Text style={{ textAlign: 'center', color: theme.subText }}>Loading teams data...</Text>
             </View>
-            <Text style={styles.teamListYear}>2025 – Present</Text>
-          </View>
-          <View style={styles.teamListRow}>
-            <Image source={{uri: 'https://ui-avatars.com/api/?name=WX&background=8e44ad&color=fff'}} style={styles.smallTeamLogo} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.teamListTitle} numberOfLines={1}>Warriors XI</Text>
-              <Text style={styles.teamListSub}>All-Rounder</Text>
-            </View>
-            <Text style={styles.teamListYear}>2024 – 2025</Text>
-          </View>
+          ) : profile.teams && profile.teams.length > 0 ? (
+            profile.teams.map((team, index) => (
+              <View key={team.id || index} style={styles.teamListRow}>
+                <Image source={{uri: team.logo || 'https://ui-avatars.com/api/?name=TM&background=1e3a29&color=fff'}} style={styles.smallTeamLogo} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.teamListTitle} numberOfLines={1}>{team.name || ''}</Text>
+                  <Text style={styles.teamListSub}>{team.role || ''}</Text>
+                </View>
+                <Text style={styles.teamListYear}>{team.yearRange || ''}</Text>
+              </View>
+            ))
+          ) : (
+            /* Fallback to hardcoded teams if no teams data in profile */
+            <>
+              <View style={styles.teamListRow}>
+                <Image source={{uri: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff'}} style={styles.smallTeamLogo} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.teamListTitle} numberOfLines={1}>Falcons CC</Text>
+                  <Text style={styles.teamListSub}>All-Rounder</Text>
+                </View>
+                <Text style={styles.teamListYear}>2025 – Present</Text>
+              </View>
+              <View style={styles.teamListRow}>
+                <Image source={{uri: 'https://ui-avatars.com/api/?name=WX&background=8e44ad&color=fff'}} style={styles.smallTeamLogo} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.teamListTitle} numberOfLines={1}>Warriors XI</Text>
+                  <Text style={styles.teamListSub}>All-Rounder</Text>
+                </View>
+                <Text style={styles.teamListYear}>2024 – 2025</Text>
+              </View>
+            </>
+          )}
         </View>
       </View>
 
@@ -264,20 +407,40 @@ export default function ProfileScreen() {
             <Text style={styles.miniCardTitle}>Tournaments</Text>
             <TouchableOpacity><Text style={styles.seeAllText}>See All</Text></TouchableOpacity>
           </View>
-          <View style={styles.teamListRow}>
-            <View style={styles.trophyIconBg}><Ionicons name="trophy" size={16} color="#f1c40f" /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.teamListTitle} numberOfLines={1}>Kurukshetra T20</Text>
-              <Text style={styles.teamListSub}>Semi-Finalist • 2026</Text>
+          {isLoading ? (
+            {/* Loading state */}
+            <View style={{ padding: 24 }}>
+              <Text style={{ textAlign: 'center', color: theme.subText }}>Loading tournaments data...</Text>
             </View>
-          </View>
-          <View style={styles.teamListRow}>
-            <View style={styles.trophyIconBg}><Ionicons name="trophy" size={16} color="#f1c40f" /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.teamListTitle} numberOfLines={1}>Hyderabad Turf</Text>
-              <Text style={styles.teamListSub}>Winner • 2025</Text>
-            </View>
-          </View>
+          ) : profile.tournaments && profile.tournaments.length > 0 ? (
+            profile.tournaments.map((tournament, index) => (
+              <View key={tournament.id || index} style={styles.teamListRow}>
+                <View style={styles.trophyIconBg}><Ionicons name="trophy" size={16} color="#f1c40f" /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.teamListTitle} numberOfLines={1}>{tournament.name || ''}</Text>
+                  <Text style={styles.teamListSub}>{tournament.subtitle || ''}</Text>
+                </View>
+              </View>
+            ))
+          ) : (
+            /* Fallback to hardcoded tournaments */
+            <>
+              <View style={styles.teamListRow}>
+                <View style={styles.trophyIconBg}><Ionicons name="trophy" size={16} color="#f1c40f" /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.teamListTitle} numberOfLines={1}>Kurukshetra T20</Text>
+                  <Text style={styles.teamListSub}>Semi-Finalist • 2026</Text>
+                </View>
+              </View>
+              <View style={styles.teamListRow}>
+                <View style={styles.trophyIconBg}><Ionicons name="trophy" size={16} color="#f1c40f" /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.teamListTitle} numberOfLines={1}>Hyderabad Turf</Text>
+                  <Text style={styles.teamListSub}>Winner • 2025</Text>
+                </View>
+              </View>
+            </>
+          )}
         </View>
 
         {/* ACHIEVEMENTS */}
@@ -286,21 +449,39 @@ export default function ProfileScreen() {
             <Text style={styles.miniCardTitle}>Achievements</Text>
             <TouchableOpacity><Text style={styles.seeAllText}>See All</Text></TouchableOpacity>
           </View>
-          <View style={styles.teamListRow}>
-            <Ionicons name="star" size={16} color="#f39c12" style={{ marginRight: 8 }} />
-            <Text style={[styles.teamListTitle, { flex: 1 }]} numberOfLines={1}>POTM</Text>
-            <Text style={styles.teamListYear}>8 Times</Text>
-          </View>
-          <View style={styles.teamListRow}>
-            <MaterialCommunityIcons name="target" size={16} color="#e67e22" style={{ marginRight: 8 }} />
-            <Text style={[styles.teamListTitle, { flex: 1 }]} numberOfLines={1}>500 Runs</Text>
-            <Text style={styles.teamListYear}>Milestone</Text>
-          </View>
-          <View style={styles.teamListRow}>
-            <MaterialCommunityIcons name="cricket" size={16} color="#e67e22" style={{ marginRight: 8 }} />
-            <Text style={[styles.teamListTitle, { flex: 1 }]} numberOfLines={1}>50 Wickets</Text>
-            <Text style={styles.teamListYear}>Milestone</Text>
-          </View>
+          {isLoading ? (
+            {/* Loading state */}
+            <View style={{ padding: 24 }}>
+              <Text style={{ textAlign: 'center', color: theme.subText }}>Loading achievements data...</Text>
+            </View>
+          ) : profile.achievements && profile.achievements.length > 0 ? (
+            profile.achievements.map((achievement, index) => (
+              <View key={achievement.id || index} style={styles.teamListRow}>
+                <MaterialCommunityIcons name="target" size={16} color="#e67e22" style={{ marginRight: 8 }} />
+                <Text style={[styles.teamListTitle, { flex: 1 }]} numberOfLines={1}>{achievement.title || ''}</Text>
+                <Text style={styles.teamListYear}>{achievement.description || ''}</Text>
+              </View>
+            ))
+          ) : (
+            /* Fallback to hardcoded achievements */
+            <>
+              <View style={styles.teamListRow}>
+                <Ionicons name="star" size={16} color="#f39c12" style={{ marginRight: 8 }} />
+                <Text style={[styles.teamListTitle, { flex: 1 }]} numberOfLines={1}>POTM</Text>
+                <Text style={styles.teamListYear}>8 Times</Text>
+              </View>
+              <View style={styles.teamListRow}>
+                <MaterialCommunityIcons name="target" size={16} color="#e67e22" style={{ marginRight: 8 }} />
+                <Text style={styles.teamListTitle, { flex: 1 }]} numberOfLines={1}>500 Runs</Text>
+                <Text style={styles.teamListYear}>Milestone</Text>
+              </View>
+              <View style={styles.teamListRow}>
+                <MaterialCommunityIcons name="cricket" size={16} color="#e67e22" style={{ marginRight: 8 }} />
+                <Text style={styles.teamListTitle, { flex: 1 }]} numberOfLines={1}>50 Wickets</Text>
+                <Text style={styles.teamListYear}>Milestone</Text>
+              </View>
+            </>
+          )}
         </View>
       </View>
 
@@ -539,16 +720,16 @@ export default function ProfileScreen() {
       </View>
 
       {/* Feed */}
-      {POSTS_FEED.map((post) => (
+      {postsFeed.map((post) => (
         <View key={post.id} style={styles.postCard}>
           <View style={styles.postHeaderRow}>
-            <Image source={{ uri: PROFILE.avatar }} style={styles.postAvatar} />
+            <Image source={{ uri: profile.avatar || '' }} style={styles.postAvatar} />
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={styles.postName}>{PROFILE.name}</Text>
+                <Text style={styles.postName}>{profile.name || ''}</Text>
                 <MaterialCommunityIcons name="check-decagram" size={14} color={theme.primary} style={{ marginLeft: 4 }} />
               </View>
-              <Text style={styles.postSubMeta}>{PROFILE.username} • {post.time}</Text>
+              <Text style={styles.postSubMeta}>{profile.username || ''} • {post.time}</Text>
             </View>
             <TouchableOpacity><Feather name="more-horizontal" size={20} color={theme.subText} /></TouchableOpacity>
           </View>
@@ -568,24 +749,24 @@ export default function ProfileScreen() {
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <View>
                   <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                    <Text style={styles.perfBoxScore}>86*</Text>
-                    <Text style={styles.perfBoxBalls}> (52)</Text>
+                    <Text style={styles.perfBoxScore}>{post.myScore || ''}</Text>
+                    <Text style={styles.perfBoxBalls}> ({post.myBalls || ''})</Text>
                   </View>
-                  <Text style={styles.perfBoxDetails}>7 Fours • 3 Sixes</Text>
+                  <Text style={styles.perfBoxDetails}>{post.extraInfo ? post.extraInfo : `${post.myFours || 0} Fours • ${post.mySixes || 0} Sixes`}</Text>
                 </View>
                 <View style={{ alignItems: 'center' }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                    <Image source={{uri: 'https://ui-avatars.com/api/?name=RS&background=b9770e&color=fff'}} style={{width: 20, height: 20, borderRadius: 10, marginRight: 6}} />
-                    <Text style={{ color: theme.text, fontSize: 12, fontWeight: 'bold' }}>vs Royal Strikers</Text>
+                    <Image source={{uri: post.opponentAvatar || 'https://ui-avatars.com/api/?name=OP&background=b9770e&color=fff'}} style={{width: 20, height: 20, borderRadius: 10, marginRight: 6}} />
+                    <Text style={{ color: theme.text, fontSize: 12, fontWeight: 'bold' }}>vs {post.opponentName || ''}</Text>
                   </View>
-                  <Text style={{ color: theme.primary, fontSize: 11, fontWeight: 'bold' }}>Won by 6 wickets</Text>
+                  <Text style={{ color: theme.primary, fontSize: 11, fontWeight: 'bold' }}>{post.matchResult || ''}</Text>
                 </View>
                 <View style={{ alignItems: 'center' }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                     <Feather name="calendar" size={12} color={theme.subText} style={{ marginRight: 4 }} />
-                    <Text style={{ color: theme.subText, fontSize: 11 }}>Yesterday</Text>
+                    <Text style={{ color: theme.subText, fontSize: 11 }}>{post.date || ''}</Text>
                   </View>
-                  <Text style={{ color: theme.subText, fontSize: 11 }}>T20 League</Text>
+                  <Text style={{ color: theme.subText, fontSize: 11 }}>{post.league || ''}</Text>
                 </View>
               </View>
             </View>
