@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
 import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -18,83 +18,28 @@ const theme = {
   chatLeft: '#1e1e1e',
 };
 
-// --- REAL DATA - FETCHED FROM BACKEND ---
-const [inbox, setInbox] = useState([]);
-const [players, setPlayers] = useState([]);
-const [isLoading, setIsLoading] = useState(true);
+// --- MOCK DATA ---
+const MOCK_INBOX = [
+  { id: '1', type: 'DIRECT', name: 'Rahul Kumar', avatar: 'https://ui-avatars.com/api/?name=RK&background=2c3e50&color=fff', lastMessage: 'Hey, are you playing today?', time: '9:30 AM', unread: 2 },
+  { id: '2', type: 'TEAM', name: 'Thunder CC', avatar: 'https://ui-avatars.com/api/?name=TC&background=1e3a29&color=fff', lastMessage: 'Captain: Match tomorrow at 6 PM', time: '8:45 AM', muted: true },
+  { id: '3', type: 'GROUP', name: 'Saturday Turf Cricket', avatar: 'https://ui-avatars.com/api/?name=ST&background=8e44ad&color=fff', lastMessage: "Arjun: I'll be there by 5", time: 'Yesterday', unread: 1 },
+  { id: '4', type: 'MATCH', name: 'Thunder CC vs R. Strikers', avatar: 'https://ui-avatars.com/api/?name=VS&background=b9770e&color=fff', lastMessage: 'Vikram: Need 42 from 30', time: 'Yesterday', unread: 4 },
+  { id: '5', type: 'TOURNAMENT', name: 'Kurukshetra Tournament', avatar: 'https://ui-avatars.com/api/?name=KT&background=c0392b&color=fff', lastMessage: 'Organizer: Quarter finals fixed', time: 'Mon' },
+];
 
-// Fetch messaging data on component load
-useEffect(() => {
-  const fetchMessagingData = async () => {
-    try {
-      // Fetch inbox data
-      const inboxResponse = await fetch('/api/messages/inbox');
-      if (inboxResponse.ok) {
-        const inboxData = await inboxResponse.json();
-        setInbox(inboxData);
-      } else {
-        console.error('Failed to fetch inbox data');
-        setInbox([]); // Empty state on error
-      }
-
-      // Fetch players/suggestions data
-      const playersResponse = await fetch('/api/messages/suggestions');
-      if (playersResponse.ok) {
-        const playersData = await playersResponse.json();
-        setPlayers(playersData);
-      } else {
-        console.error('Failed to fetch players data');
-        setPlayers([]); // Empty state on error
-      }
-    } catch (error) {
-      console.error('Error fetching messaging data:', error);
-      // Set empty states on error
-      setInbox([]);
-      setPlayers([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  fetchMessagingData();
-}, []); // Empty deps array means run once on mount
-
-  // Fetch messages when active chat changes
-  useEffect(() => {
-    const fetchMessages = async () => {
-      if (!activeChat) {
-        setMessages([]);
-        return;
-      }
-
-      setIsLoadingMessages(true);
-      try {
-        const response = await fetch(`/api/messages/${activeChat.id}`);
-        if (response.ok) {
-          const data = await response.json();
-          setMessages(data);
-        } else {
-          console.error('Failed to fetch messages');
-          setMessages([]); // Empty state on error
-        }
-      } catch (error) {
-        console.error('Error fetching messages:', error);
-        setMessages([]); // Empty state on error
-      } finally {
-        setIsLoadingMessages(false);
-      }
-    };
-
-    fetchMessages();
-  }, [activeChat]); // Run whenever activeChat changes
+const MOCK_PLAYERS = [
+  { id: 'p1', name: 'Rahul Kumar', role: 'Cricket • All-Rounder', avatar: 'https://ui-avatars.com/api/?name=RK&background=2c3e50&color=fff' },
+  { id: 'p2', name: 'Arjun Singh', role: 'Cricket • Batter', avatar: 'https://ui-avatars.com/api/?name=AS&background=27ae60&color=fff' },
+  { id: 'p3', name: 'Vikram Rao', role: 'Cricket • Bowler', avatar: 'https://ui-avatars.com/api/?name=VR&background=c0392b&color=fff' },
+  { id: 'p4', name: 'Karthik Nair', role: 'Cricket • Wicket Keeper', avatar: 'https://ui-avatars.com/api/?name=KN&background=8e44ad&color=fff' },
+  { id: 'p5', name: 'Charan Teja', role: 'Cricket • All-Rounder', avatar: 'https://ui-avatars.com/api/?name=CT&background=d35400&color=fff' },
+];
 
 export default function MessagingModule() {
   const navigation = useNavigation();
-  const [currentScreen, setCurrentScreen] = useState('INBOX');
+  const [currentScreen, setCurrentScreen] = useState('INBOX'); 
   const [activeChat, setActiveChat] = useState(null);
   const [selectedMembers, setSelectedMembers] = useState([]);
-  const [messages, setMessages] = useState([]);
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
   const navigate = (screen, data = null) => {
     setActiveChat(data);
@@ -198,9 +143,9 @@ export default function MessagingModule() {
 
         <Text style={styles.sectionTitle}>CONVERSATIONS</Text>
 
-        {inbox.map((chat) => (
-          <TouchableOpacity
-            key={chat.id}
+        {MOCK_INBOX.map((chat) => (
+          <TouchableOpacity 
+            key={chat.id} 
             style={styles.chatRow}
             onPress={() => navigate('CHAT', chat)}
           >
@@ -256,17 +201,13 @@ export default function MessagingModule() {
 
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         <Text style={styles.sectionTitle}>People</Text>
-        {players.map((p) => (
-          <UserListItem avatar={p.avatar} name={p.name} subtitle={p.role} rightElement={<Feather name="chevron-right" size={16} color={theme.subText}/>} />
-        ))}
-
+        <UserListItem avatar={MOCK_PLAYERS[0].avatar} name="Rahul Kumar" subtitle="Cricket • All-Rounder" rightElement={<Feather name="chevron-right" size={16} color={theme.subText}/>} />
+        
         <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Teams / Groups</Text>
-        {/* TODO: Replace with real teams/groups data from API */}
-        <UserListItem avatar="https://ui-avatars.com/api/?name=TC&background=1e3a29&color=fff" name="Thunder CC" subtitle="Cricket Team • 18 Members" rightElement={<Feather name="chevron-right" size={16} color={theme.subText}/>} />
-
+        <UserListItem avatar={MOCK_INBOX[1].avatar} name="Thunder CC" subtitle="Cricket Team • 18 Members" rightElement={<Feather name="chevron-right" size={16} color={theme.subText}/>} />
+        
         <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Matches</Text>
-        {/* TODO: Replace with real matches data from API */}
-        <UserListItem avatar="https://ui-avatars.com/api/?name=VS&background=b9770e&color=fff" name="Thunder CC vs Royal Strikers" subtitle="T20 • May 18, 2025" rightElement={<Feather name="chevron-right" size={16} color={theme.subText}/>} />
+        <UserListItem avatar={MOCK_INBOX[3].avatar} name="Thunder CC vs Royal Strikers" subtitle="T20 • May 18, 2025" rightElement={<Feather name="chevron-right" size={16} color={theme.subText}/>} />
       </ScrollView>
     </View>
   );
@@ -284,7 +225,7 @@ export default function MessagingModule() {
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16 }}>
         <View style={styles.card}>
-          <UserListItem avatar={inbox[0]?.avatar || ''} name={inbox[0]?.name || 'Rahul Kumar'} subtitle="Hey, are you looking for a player?" rightElement={<Text style={styles.chatTime}>Today</Text>} />
+          <UserListItem avatar={MOCK_PLAYERS[0].avatar} name="Rahul Kumar" subtitle="Hey, are you looking for a player?" rightElement={<Text style={styles.chatTime}>Today</Text>} />
           <View style={styles.actionRow}>
             <TouchableOpacity style={styles.btnPrimary}><Text style={styles.btnPrimaryText}>Accept</Text></TouchableOpacity>
             <TouchableOpacity style={styles.btnSecondary}><Text style={styles.btnSecondaryText}>Delete</Text></TouchableOpacity>
@@ -293,16 +234,16 @@ export default function MessagingModule() {
         </View>
 
         <Text style={[styles.sectionTitle, { marginTop: 16, marginBottom: 12 }]}>GROUP INVITATIONS</Text>
-
+        
         <View style={styles.card}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-            <Image source={{ uri: inbox[1]?.avatar || '' }} style={[styles.avatar, { width: 32, height: 32 }]} />
-            <Text style={[styles.listSubtitle, { marginLeft: 12 }]}>{inbox[1]?.name || 'Arjun Singh'} invited you to:</Text>
+            <Image source={{ uri: MOCK_PLAYERS[1].avatar }} style={[styles.avatar, { width: 32, height: 32 }]} />
+            <Text style={[styles.listSubtitle, { marginLeft: 12 }]}>Arjun Singh invited you to:</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, backgroundColor: theme.surfaceLight, padding: 12, borderRadius: 8 }}>
-            <Image source={{ uri: inbox[2]?.avatar || '' }} style={styles.avatar} />
+            <Image source={{ uri: MOCK_INBOX[2].avatar }} style={styles.avatar} />
             <View style={{ marginLeft: 12 }}>
-              <Text style={styles.listName}>{inbox[2]?.name || 'Saturday Turf Cricket'}</Text>
+              <Text style={styles.listName}>Saturday Turf Cricket</Text>
               <Text style={styles.listSubtitle}>8 members</Text>
             </View>
           </View>
@@ -377,9 +318,9 @@ export default function MessagingModule() {
         <Text style={styles.sectionTitle}>PEOPLE</Text>
       </View>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16 }}>
-        {players.map((p) => (
-          <UserListItem
-            key={p.id} avatar={p.avatar} name={p.name} subtitle={p.role}
+        {MOCK_PLAYERS.map(p => (
+          <UserListItem 
+            key={p.id} avatar={p.avatar} name={p.name} subtitle={p.role} 
             rightElement={<Feather name="chevron-right" size={16} color={theme.subText}/>}
             onPress={() => navigate('CHAT', { type: 'DIRECT', name: p.name, avatar: p.avatar })}
           />
@@ -421,11 +362,11 @@ export default function MessagingModule() {
         </View>
 
         <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}>
-          {players.map((p) => {
+          {MOCK_PLAYERS.map(p => {
             const isSelected = selectedMembers.includes(p.id);
             return (
-              <UserListItem
-                key={p.id} avatar={p.avatar} name={p.name} subtitle={p.role}
+              <UserListItem 
+                key={p.id} avatar={p.avatar} name={p.name} subtitle={p.role} 
                 onPress={() => toggleMember(p.id)}
                 rightElement={
                   <View style={[styles.checkbox, isSelected && styles.checkboxActive]}>
@@ -438,9 +379,9 @@ export default function MessagingModule() {
         </ScrollView>
         
         <View style={styles.floatingFooter}>
-          <TouchableOpacity
+          <TouchableOpacity 
             style={[styles.btnPrimary, { flex: 1, paddingVertical: 14 }]}
-            onPress={() => navigate('CHAT', inbox[2] || {})}
+            onPress={() => navigate('CHAT', MOCK_INBOX[2])} 
           >
             <Text style={[styles.btnPrimaryText, { fontSize: 16 }]}>Next</Text>
           </TouchableOpacity>
@@ -497,14 +438,14 @@ export default function MessagingModule() {
             {isMatch && (
               <View style={styles.contextCard}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Image source={{ uri: activeChat?.teamAAvatar || 'https://ui-avatars.com/api/?name=TC&background=1e3a29&color=fff' }} style={{width:40, height:40, borderRadius:20}} />
+                  <Image source={{ uri: 'https://ui-avatars.com/api/?name=TC&background=1e3a29&color=fff' }} style={{width:40, height:40, borderRadius:20}} />
                   <View style={{ alignItems: 'center' }}>
-                    <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>{activeChat?.teamAScore || '0'}/{activeChat?.teamBWickets || '0'}</Text>
-                    <Text style={{ color: theme.subText, fontSize: 12 }}>{activeChat?.overs || '0.0'} Overs</Text>
+                    <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>152/4</Text>
+                    <Text style={{ color: theme.subText, fontSize: 12 }}>18.3 Overs</Text>
                   </View>
-                  <Image source={{ uri: activeChat?.teamBAvatar || 'https://ui-avatars.com/api/?name=RS&background=b9770e&color=fff' }} style={{width:40, height:40, borderRadius:20}} />
+                  <Image source={{ uri: 'https://ui-avatars.com/api/?name=RS&background=b9770e&color=fff' }} style={{width:40, height:40, borderRadius:20}} />
                 </View>
-                <Text style={{ color: theme.primary, textAlign: 'center', fontSize: 12, marginTop: 12 }}>{activeChat?.matchStatus || ''}</Text>
+                <Text style={{ color: theme.primary, textAlign: 'center', fontSize: 12, marginTop: 12 }}>Thunder CC need 48 runs from 9 balls</Text>
               </View>
             )}
 
@@ -513,8 +454,8 @@ export default function MessagingModule() {
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Image source={{ uri: activeChat.avatar }} style={{width:48, height:48, borderRadius:8, marginRight: 12}} />
                   <View>
-                    <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>{activeChat?.name || 'Tournament'}</Text>
-                    <Text style={{ color: theme.subText, fontSize: 12, marginTop: 2 }}>{activeChat?.details || ''}</Text>
+                    <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>Kurukshetra Tournament</Text>
+                    <Text style={{ color: theme.subText, fontSize: 12, marginTop: 2 }}>Quarter Finals • May 20 - May 25</Text>
                   </View>
                 </View>
               </View>
@@ -524,96 +465,66 @@ export default function MessagingModule() {
 
             {isDirect ? (
               <>
-                {isLoadingMessages ? (
-                  <>
-                    <View style={styles.bubbleLeft}>
-                      <Text style={styles.bubbleText}>Loading messages...</Text>
-                      <Text style={styles.bubbleTime}>Just now</Text>
-                    </View>
-                  </>
-                ) : messages.length === 0 ? (
-                  <>
-                    <View style={styles.bubbleLeft}>
-                      <Text style={styles.bubbleText}>No messages yet</Text>
-                      <Text style={styles.bubbleTime}>Just now</Text>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    {messages.map((msg, index) => (
-                      msg.sender === 'user' ? (
-                        <View key={msg.id} style={styles.bubbleRight}>
-                          <Text style={styles.bubbleText}>{msg.text}</Text>
-                          <Text style={styles.bubbleTime}>{msg.time} <Feather name="check-circle" size={10} color={theme.primary}/></Text>
-                        </View>
-                      ) : (
-                        <View key={msg.id} style={styles.bubbleLeft}>
-                          <Text style={styles.bubbleText}>{msg.text}</Text>
-                          <Text style={styles.bubbleTime}>{msg.time}</Text>
-                        </View>
-                      )
-                    ))}
-                  </>
-                )}
+                <View style={styles.bubbleLeft}>
+                  <Text style={styles.bubbleText}>Hey, are you playing today?</Text>
+                  <Text style={styles.bubbleTime}>9:30 AM</Text>
+                </View>
+                <View style={styles.bubbleRight}>
+                  <Text style={styles.bubbleText}>Yes, I'm playing.</Text>
+                  <Text style={styles.bubbleTime}>9:31 AM <Feather name="check-circle" size={10} color={theme.primary}/></Text>
+                </View>
+                <View style={styles.bubbleLeft}>
+                  <Text style={styles.bubbleText}>Great! Which ground?</Text>
+                  <Text style={styles.bubbleTime}>9:31 AM</Text>
+                </View>
+                <View style={styles.bubbleRight}>
+                  <Text style={styles.bubbleText}>City Arena, 6 PM.</Text>
+                  <Text style={styles.bubbleTime}>9:32 AM <Feather name="check-circle" size={10} color={theme.primary}/></Text>
+                </View>
               </>
             ) : (
               <>
-                {isLoadingMessages ? (
-                  <>
-                    <View style={styles.bubbleLeft}>
-                      <Text style={styles.bubbleText}>Loading messages...</Text>
-                      <Text style={styles.bubbleTime}>Just now</Text>
-                    </View>
-                  </>
-                ) : messages.length === 0 ? (
-                  <>
-                    <View style={styles.bubbleLeft}>
-                      <Text style={styles.bubbleText}>No messages yet</Text>
-                      <Text style={styles.bubbleTime}>Just now</Text>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    {messages.map((msg, index) => (
-                      msg.sender === 'user' ? (
-                        <View key={msg.id} style={styles.bubbleRight}>
-                          <Text style={styles.bubbleText}>{msg.text}</Text>
-                          <Text style={styles.bubbleTime}>{msg.time} <Feather name="check-circle" size={10} color={theme.primary}/></Text>
-                        </View>
-                      ) : (
-                        <View key={msg.id} style={styles.bubbleLeft}>
-                          <Text style={styles.bubbleText}>{msg.text}</Text>
-                          <Text style={styles.bubbleTime}>{msg.time}</Text>
-                        </View>
-                      )
-                    ))}
-                  </>
-                )}
+                <View style={styles.bubbleLeft}>
+                  <Text style={styles.senderName}>{MOCK_PLAYERS[0].name}</Text>
+                  <Text style={styles.bubbleText}>Who is playing tomorrow?</Text>
+                  <Text style={styles.bubbleTime}>9:30 AM</Text>
+                </View>
 
                 {isTeam && (
                   <View style={styles.matchUpdateBubble}>
                     <Text style={styles.matchUpdateTitle}>Match Update</Text>
-                    <Text style={styles.bubbleText}>{activeChat?.matchUpdateText || 'Practice match added'}</Text>
-                    <Text style={[styles.bubbleTime, { marginTop: 4, color: theme.subText }]}>{activeChat?.matchUpdateTime || 'Sun, 18 May • 4:00 PM'}</Text>
-                    <Text style={[styles.bubbleTime, { color: theme.subText }]}>{activeChat?.matchUpdateLocation || 'City Arena'}</Text>
+                    <Text style={styles.bubbleText}>Practice match added</Text>
+                    <Text style={[styles.bubbleTime, { marginTop: 4, color: theme.subText }]}>Sun, 18 May • 4:00 PM</Text>
+                    <Text style={[styles.bubbleTime, { color: theme.subText }]}>City Arena</Text>
                     <TouchableOpacity style={styles.btnOutline}><Text style={styles.btnOutlineText}>View Match</Text></TouchableOpacity>
                   </View>
                 )}
 
                 {isTournament && (
                   <View style={styles.bubbleLeft}>
-                    <Text style={[styles.senderName, { color: '#f39c12' }]}>{activeChat?.organizerName || 'Organizer'}</Text>
-                    <Text style={styles.bubbleText}>{activeChat?.organizerMessage || 'Quarter finals fixtures are out. Check the fixtures section.'}</Text>
+                    <Text style={[styles.senderName, { color: '#f39c12' }]}>Organizer</Text>
+                    <Text style={styles.bubbleText}>Quarter finals fixtures are out. Check the fixtures section.</Text>
                     <View style={styles.attachmentBubble}>
                       <View style={styles.fileIcon}><Feather name="file-text" size={20} color="#fff" /></View>
                       <View>
-                        <Text style={{color:'#fff', fontSize: 13, fontWeight: '500'}}>{activeChat?.attachmentName || 'Quarter_Finals_Fixtures.pdf'}</Text>
-                        <Text style={{color: theme.subText, fontSize: 11}}>{activeChat?.attachmentSize || 'PDF • 1.2 MB'}</Text>
+                        <Text style={{color:'#fff', fontSize: 13, fontWeight: '500'}}>Quarter_Finals_Fixtures.pdf</Text>
+                        <Text style={{color: theme.subText, fontSize: 11}}>PDF • 1.2 MB</Text>
                       </View>
                     </View>
-                    <Text style={styles.bubbleTime}>{activeChat?.organizerTime || 'Yesterday'}</Text>
+                    <Text style={styles.bubbleTime}>Yesterday</Text>
                   </View>
                 )}
+
+                <View style={styles.bubbleRight}>
+                  <Text style={styles.bubbleText}>I'm in.</Text>
+                  <Text style={styles.bubbleTime}>9:31 AM <Feather name="check-circle" size={10} color={theme.primary}/></Text>
+                </View>
+
+                <View style={styles.bubbleLeft}>
+                  <Text style={[styles.senderName, { color: '#e74c3c' }]}>{MOCK_PLAYERS[2].name}</Text>
+                  <Text style={styles.bubbleText}>{isMatch ? "Need 42 from 30." : "Same."}</Text>
+                  <Text style={styles.bubbleTime}>9:32 AM</Text>
+                </View>
               </>
             )}
 
