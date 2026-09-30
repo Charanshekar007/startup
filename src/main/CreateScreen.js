@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useMatches } from '../context/MatchContext';
+import { useAuthStore } from '../store/authStore';
 import {
   TEAM_A_DEFAULT,
   TEAM_B_DEFAULT,
@@ -76,6 +77,7 @@ export default function CreateScreen({ navigation }) {
 
   // Global Match Store
   const { addMatch, setActiveMatch } = useMatches();
+  const accountData = useAuthStore((state) => state.accountData);
 
   // Update overs whenever format changes
   const handleSelectFormat = (fmt) => {
@@ -214,12 +216,28 @@ export default function CreateScreen({ navigation }) {
     setActiveStep(6);
   };
 
-  // Build match data and start game
   const handleStartMatch = () => {
-    const strikerPlayer = battingXIPlayers.find((p) => p.id === strikerId) || battingXIPlayers[0];
-    const nonStrikerPlayer = battingXIPlayers.find((p) => p.id === nonStrikerId) || battingXIPlayers[1];
-    const openingBowler = bowlingXIPlayers.find((p) => p.id === openingBowlerId) || bowlingXIPlayers[bowlingXIPlayers.length - 1];
-    const wicketkeeper = bowlingXIPlayers.find((p) => p.id === wicketkeeperId) || bowlingXIPlayers[0];
+    const currentUserId = accountData?.id;
+    const currentUserName = accountData?.name || accountData?.fullName;
+
+    const baseXI_A = SQUAD_A.filter((p) => selectedXI_A.includes(p.id)).map((p) => {
+      if (currentUserId && (p.id === currentUserId || (currentUserId === 'usr_arjun123' && p.id === 'a2') || (currentUserName && p.name && p.name.includes(currentUserName)))) {
+        return { ...p, id: currentUserId, userId: currentUserId, name: currentUserName || p.name };
+      }
+      return p;
+    });
+
+    const baseXI_B = SQUAD_B.filter((p) => selectedXI_B.includes(p.id)).map((p) => {
+      if (currentUserId && (p.id === currentUserId || (currentUserId === 'usr_rahul123' && p.id === 'b2') || (currentUserName && p.name && p.name.includes(currentUserName)))) {
+        return { ...p, id: currentUserId, userId: currentUserId, name: currentUserName || p.name };
+      }
+      return p;
+    });
+
+    const strikerPlayer = baseXI_A.concat(baseXI_B).find((p) => p.id === strikerId || (currentUserId && strikerId === 'a2' && p.id === currentUserId)) || battingXIPlayers[0];
+    const nonStrikerPlayer = baseXI_A.concat(baseXI_B).find((p) => p.id === nonStrikerId || (currentUserId && nonStrikerId === 'a2' && p.id === currentUserId)) || battingXIPlayers[1];
+    const openingBowler = baseXI_A.concat(baseXI_B).find((p) => p.id === openingBowlerId) || bowlingXIPlayers[bowlingXIPlayers.length - 1];
+    const wicketkeeper = baseXI_A.concat(baseXI_B).find((p) => p.id === wicketkeeperId) || bowlingXIPlayers[0];
 
     const newMatchData = {
       id: `match_${Date.now()}`,
@@ -237,8 +255,8 @@ export default function CreateScreen({ navigation }) {
       decision: tossDecision,
       firstInningsBattingTeam: firstInningsBattingTeam.name,
       firstInningsBowlingTeam: firstInningsBowlingTeam.name,
-      playingXI_A: SQUAD_A.filter((p) => selectedXI_A.includes(p.id)),
-      playingXI_B: SQUAD_B.filter((p) => selectedXI_B.includes(p.id)),
+      playingXI_A: baseXI_A,
+      playingXI_B: baseXI_B,
       firstInningsSetup: {
         striker: { ...strikerPlayer, runs: 0, balls: 0, fours: 0, sixes: 0 },
         nonStriker: { ...nonStrikerPlayer, runs: 0, balls: 0, fours: 0, sixes: 0 },

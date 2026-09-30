@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, Modal, Alert, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,8 @@ import AsyncStorageRaw from '@react-native-async-storage/async-storage';
 const AsyncStorage = AsyncStorageRaw?.default || AsyncStorageRaw;
 import { useAuthStore } from '../store/authStore';
 import { getUserById, updateUserProfile } from '../store/userRepository';
+import { useMatches } from '../context/MatchContext';
+import { calculatePlayerStats } from '../services/playerStatsService';
 
 const theme = {
   bg: '#0a0a0a',
@@ -20,29 +22,6 @@ const theme = {
   danger: '#e74c3c',
   dangerDark: 'rgba(231, 76, 60, 0.15)',
 };
-
-// ==========================================
-// MATCH / PERFORMANCE DISPLAY DATA (Unchanged per task instructions)
-// ==========================================
-const RECENT_PERFORMANCE = [
-  { id: '1', score: '86*', balls: '52', fours: 7, sixes: 3, vs: 'Royal Strikers', potm: true, time: 'Yesterday', icon: 'cricket-bat' },
-  { id: '2', score: '42', balls: '31', fours: 5, sixes: 1, vs: 'Warriors XI', potm: false, time: '3 days ago', icon: 'cricket-bat' },
-  { id: '3', score: '3/24', balls: '4', overs: '4 Overs', vs: 'Titans CC', potm: false, time: '5 days ago', icon: 'cricket' },
-];
-
-const FORM_DATA = [
-  { id: 'f1', score: 86, result: 'W' },
-  { id: 'f2', score: 42, result: 'W' },
-  { id: 'f3', score: 31, result: 'L' },
-  { id: 'f4', score: 74, result: 'W' },
-  { id: 'f5', score: 18, result: 'L' },
-];
-
-const MATCH_HISTORY = [
-  { id: 'm1', format: 'T20', league: 'Kurukshetra T20 • Semi-Final', teamA: 'Falcons CC', logoA: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff', teamB: 'Royal Strikers', logoB: 'https://ui-avatars.com/api/?name=RS&background=b9770e&color=fff', result: 'Won by 6 wickets', myScore: '86*', myBalls: '52', myFours: 7, mySixes: 3, potm: true, time: 'Yesterday' },
-  { id: 'm2', format: 'T20', league: 'Hyderabad Turf League • League', teamA: 'Warriors XI', logoA: 'https://ui-avatars.com/api/?name=WX&background=8e44ad&color=fff', teamB: 'Falcons CC', logoB: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff', result: 'Lost by 3 runs', myScore: '42', myBalls: '31', myFours: 5, mySixes: 1, potm: false, time: '3 days ago' },
-  { id: 'm3', format: 'T20', league: 'Hyderabad Turf League • League', teamA: 'Falcons CC', logoA: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff', teamB: 'Titans CC', logoB: 'https://ui-avatars.com/api/?name=TC&background=2c3e50&color=fff', result: 'Won by 22 runs', myScore: '3/24', myBalls: '4', myFours: 4, mySixes: 0, extraInfo: '4 Overs • 2 Maidens', potm: false, time: '5 days ago' },
-];
 
 const POSTS_FEED = [
   { id: 'p1', text: "Big match tonight! 💪\nLet's go team! 🦅🔥", time: '2h', image: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', likes: 128, comments: 24, shares: 12 },
@@ -147,6 +126,28 @@ export default function ProfileScreen({ route }) {
   const followers = effectiveAccount?.followers ?? 0;
   const following = effectiveAccount?.following ?? 0;
   const posts = effectiveAccount?.posts ?? 0;
+
+  // 3. Connect to Matches & Compute Real Statistics from Actual Matches
+  const { matches = [] } = useMatches() || {};
+  const playerStats = useMemo(() => {
+    return calculatePlayerStats(matches, profileOwnerId, {
+      formatFilter: activeMatchFilter,
+      playerName: name,
+    });
+  }, [matches, profileOwnerId, activeMatchFilter, name]);
+
+  const {
+    batting: battingStats,
+    bowling: bowlingStats,
+    fielding: fieldingStats,
+    matchSummary,
+    recentPerformance,
+    formData,
+    matchHistory,
+    achievements,
+    tournaments,
+    teams: derivedTeams,
+  } = playerStats;
 
   // Logout handler
   const handleLogout = async () => {
@@ -450,27 +451,35 @@ export default function ProfileScreen({ route }) {
         {/* Recent Performance */}
         <View className="flex-row justify-between items-center px-4 mb-3 mt-2">
           <Text className="text-white text-base font-bold">Recent Performance</Text>
-          <TouchableOpacity><Text className="text-[#23c55e] text-xs font-bold">See All</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => setActiveTab('Matches')}><Text className="text-[#23c55e] text-xs font-bold">See All</Text></TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, marginBottom: 16 }}>
-          {RECENT_PERFORMANCE.map(perf => (
-            <View key={perf.id} className="w-[150px] bg-[#1a1a1a] rounded-xl border border-[#222222] p-3 mr-3">
-              <View className="flex-row justify-between items-start mb-2">
-                <View className="flex-row items-baseline">
-                  <Text className="text-[#23c55e] text-xl font-bold">{perf.score}</Text>
-                  <Text className="text-[#888888] text-[11px]"> ({perf.balls})</Text>
+          {recentPerformance && recentPerformance.length > 0 ? (
+            recentPerformance.map(perf => (
+              <View key={perf.id} className="w-[150px] bg-[#1a1a1a] rounded-xl border border-[#222222] p-3 mr-3">
+                <View className="flex-row justify-between items-start mb-2">
+                  <View className="flex-row items-baseline">
+                    <Text className="text-[#23c55e] text-xl font-bold">{perf.score}</Text>
+                    {perf.balls ? <Text className="text-[#888888] text-[11px]"> ({perf.balls})</Text> : null}
+                  </View>
+                  <View className="w-6 h-6 rounded-full bg-[#121212] items-center justify-center"><MaterialCommunityIcons name={perf.icon || 'cricket-bat'} size={16} color={theme.subText} /></View>
                 </View>
-                <View className="w-6 h-6 rounded-full bg-[#121212] items-center justify-center"><MaterialCommunityIcons name={perf.icon} size={16} color={theme.subText} /></View>
+                <Text className="text-[#888888] text-[11px] mb-0.5">{perf.overs ? perf.overs : `${perf.fours || 0} Fours • ${perf.sixes || 0} Sixes`}</Text>
+                <Text className="text-white text-[11px] mb-2" numberOfLines={1}>vs {perf.vs}</Text>
+                {perf.potm && <View className="bg-[#23c55e]/15 px-1.5 py-0.5 rounded self-start mb-2"><Text className="text-[#23c55e] text-[9px] font-bold">Player of the Match</Text></View>}
+                <View className="flex-row justify-between items-center border-t border-[#222222] pt-2 mt-auto">
+                  <Text className="text-[#888888] text-[10px]">{perf.time}</Text>
+                  <Feather name="chevron-right" size={16} color={theme.subText} />
+                </View>
               </View>
-              <Text className="text-[#888888] text-[11px] mb-0.5">{perf.overs ? perf.overs : `${perf.fours} Fours • ${perf.sixes} Sixes`}</Text>
-              <Text className="text-white text-[11px] mb-2">vs {perf.vs}</Text>
-              {perf.potm && <View className="bg-[#23c55e]/15 px-1.5 py-0.5 rounded self-start mb-2"><Text className="text-[#23c55e] text-[9px] font-bold">Player of the Match</Text></View>}
-              <View className="flex-row justify-between items-center border-t border-[#222222] pt-2 mt-auto">
-                <Text className="text-[#888888] text-[10px]">{perf.time}</Text>
-                <Feather name="chevron-right" size={16} color={theme.subText} />
-              </View>
+            ))
+          ) : (
+            <View className="w-[280px] bg-[#1a1a1a] rounded-xl border border-[#222222] p-4 items-center justify-center py-6">
+              <MaterialCommunityIcons name="cricket" size={24} color={theme.subText} style={{ marginBottom: 6 }} />
+              <Text className="text-white text-xs font-semibold">No matches played yet</Text>
+              <Text className="text-[#888888] text-[10px] mt-1 text-center">Complete a match to see your recent performances here</Text>
             </View>
-          ))}
+          )}
         </ScrollView>
 
         {/* Form & Teams Grid */}
@@ -478,24 +487,30 @@ export default function ProfileScreen({ route }) {
           {/* FORM */}
           <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 flex-1 mr-2 mb-4">
             <Text className="text-white text-[13px] font-bold mb-3">Form <Text style={{fontWeight:'normal', color:theme.subText}}>(Last 5 Matches)</Text></Text>
-            <View className="flex-1 flex-row justify-between items-end pt-4">
-              {FORM_DATA.map((data) => {
-                const isWin = data.result === 'W';
-                const barHeight = Math.max((data.score / 100) * 80, 10);
-                return (
-                  <View key={data.id} className="items-center">
-                    <Text className="text-white text-[9px] mb-1">{data.score}</Text>
-                    <View 
-                      className={`w-3.5 rounded-t-[2px] mb-1 ${isWin ? 'bg-[#23c55e]' : 'bg-[#e74c3c]'}`} 
-                      style={{ height: barHeight }} 
-                    />
-                    <View className={`border px-1 py-0.5 rounded ${isWin ? 'bg-[#23c55e]/15 border-[#23c55e]' : 'bg-[#e74c3c]/15 border-[#e74c3c]'}`}>
-                      <Text className={`text-[8px] font-bold ${isWin ? 'text-[#23c55e]' : 'text-[#e74c3c]'}`}>{data.result}</Text>
+            {formData && formData.length > 0 ? (
+              <View className="flex-1 flex-row justify-between items-end pt-4">
+                {formData.map((data) => {
+                  const isWin = data.result === 'W';
+                  const barHeight = Math.max((data.score / 100) * 80, 10);
+                  return (
+                    <View key={data.id} className="items-center">
+                      <Text className="text-white text-[9px] mb-1">{data.score}</Text>
+                      <View 
+                        className={`w-3.5 rounded-t-[2px] mb-1 ${isWin ? 'bg-[#23c55e]' : 'bg-[#e74c3c]'}`} 
+                        style={{ height: barHeight }} 
+                      />
+                      <View className={`border px-1 py-0.5 rounded ${isWin ? 'bg-[#23c55e]/15 border-[#23c55e]' : 'bg-[#e74c3c]/15 border-[#e74c3c]'}`}>
+                        <Text className={`text-[8px] font-bold ${isWin ? 'text-[#23c55e]' : 'text-[#e74c3c]'}`}>{data.result}</Text>
+                      </View>
                     </View>
-                  </View>
-                )
-              })}
-            </View>
+                  );
+                })}
+              </View>
+            ) : (
+              <View className="flex-1 justify-center items-center py-6">
+                <Text className="text-[#888888] text-xs text-center">No match data available</Text>
+              </View>
+            )}
           </View>
 
           {/* TEAMS - Real User Teams */}
@@ -551,20 +566,23 @@ export default function ProfileScreen({ route }) {
               <Text className="text-white text-[13px] font-bold">Tournaments</Text>
               <TouchableOpacity><Text className="text-[#23c55e] text-xs font-bold">See All</Text></TouchableOpacity>
             </View>
-            <View className="flex-row items-center mb-3">
-              <View className="w-7 h-7 rounded-full bg-[#f1c40f]/10 items-center justify-center mr-2.5"><Ionicons name="trophy" size={16} color="#f1c40f" /></View>
-              <View className="flex-1">
-                <Text className="text-white text-xs font-semibold" numberOfLines={1}>Kurukshetra T20</Text>
-                <Text className="text-[#888888] text-[10px] mt-0.5">Semi-Finalist • 2026</Text>
+            {tournaments && tournaments.length > 0 ? (
+              tournaments.map((t) => (
+                <View key={t.id} className="flex-row items-center mb-3">
+                  <View className="w-7 h-7 rounded-full bg-[#f1c40f]/10 items-center justify-center mr-2.5">
+                    <Ionicons name="trophy" size={16} color="#f1c40f" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-white text-xs font-semibold" numberOfLines={1}>{t.name}</Text>
+                    <Text className="text-[#888888] text-[10px] mt-0.5">{t.status} • {t.year}</Text>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <View className="py-4 items-center">
+                <Text className="text-[#888888] text-xs">No tournaments joined yet</Text>
               </View>
-            </View>
-            <View className="flex-row items-center mb-3">
-              <View className="w-7 h-7 rounded-full bg-[#f1c40f]/10 items-center justify-center mr-2.5"><Ionicons name="trophy" size={16} color="#f1c40f" /></View>
-              <View className="flex-1">
-                <Text className="text-white text-xs font-semibold" numberOfLines={1}>Hyderabad Turf</Text>
-                <Text className="text-[#888888] text-[10px] mt-0.5">Winner • 2025</Text>
-              </View>
-            </View>
+            )}
           </View>
 
           {/* ACHIEVEMENTS */}
@@ -573,21 +591,23 @@ export default function ProfileScreen({ route }) {
               <Text className="text-white text-[13px] font-bold">Achievements</Text>
               <TouchableOpacity><Text className="text-[#23c55e] text-xs font-bold">See All</Text></TouchableOpacity>
             </View>
-            <View className="flex-row items-center mb-3">
-              <Ionicons name="star" size={16} color="#f39c12" style={{ marginRight: 8 }} />
-              <Text className="text-white text-xs font-semibold flex-1" numberOfLines={1}>POTM</Text>
-              <Text className="text-[#888888] text-[10px]">8 Times</Text>
-            </View>
-            <View className="flex-row items-center mb-3">
-              <MaterialCommunityIcons name="target" size={16} color="#e67e22" style={{ marginRight: 8 }} />
-              <Text className="text-white text-xs font-semibold flex-1" numberOfLines={1}>500 Runs</Text>
-              <Text className="text-[#888888] text-[10px]">Milestone</Text>
-            </View>
-            <View className="flex-row items-center mb-3">
-              <MaterialCommunityIcons name="cricket" size={16} color="#e67e22" style={{ marginRight: 8 }} />
-              <Text className="text-white text-xs font-semibold flex-1" numberOfLines={1}>50 Wickets</Text>
-              <Text className="text-[#888888] text-[10px]">Milestone</Text>
-            </View>
+            {achievements && achievements.length > 0 ? (
+              achievements.map((ach) => (
+                <View key={ach.id} className="flex-row items-center mb-3">
+                  {ach.iconSet === 'Ionicons' ? (
+                    <Ionicons name={ach.icon} size={16} color={ach.color} style={{ marginRight: 8 }} />
+                  ) : (
+                    <MaterialCommunityIcons name={ach.icon} size={16} color={ach.color} style={{ marginRight: 8 }} />
+                  )}
+                  <Text className="text-white text-xs font-semibold flex-1" numberOfLines={1}>{ach.title}</Text>
+                  <Text className="text-[#888888] text-[10px]">{ach.value}</Text>
+                </View>
+              ))
+            ) : (
+              <View className="py-4 items-center">
+                <Text className="text-[#888888] text-xs">No achievements yet</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -606,25 +626,31 @@ export default function ProfileScreen({ route }) {
           <MaterialCommunityIcons name="cricket-bat" size={18} color={theme.subText} style={{ marginRight: 8 }} />
           <Text className="text-white text-base font-bold">Batting</Text>
         </View>
-        <View className="flex-row items-center bg-[#121212] border border-[#222222] px-2.5 py-1 rounded-md">
-          <Text className="text-white text-[11px] mr-1.5">All Formats</Text>
+        <TouchableOpacity 
+          onPress={() => {
+            const nextIdx = (MATCH_FILTERS.indexOf(activeMatchFilter) + 1) % MATCH_FILTERS.length;
+            setActiveMatchFilter(MATCH_FILTERS[nextIdx]);
+          }}
+          className="flex-row items-center bg-[#121212] border border-[#222222] px-2.5 py-1 rounded-md"
+        >
+          <Text className="text-white text-[11px] mr-1.5">{activeMatchFilter === 'All' ? 'All Formats' : activeMatchFilter}</Text>
           <Feather name="chevron-down" size={14} color={theme.subText} />
-        </View>
+        </TouchableOpacity>
       </View>
       <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 mx-4 mb-4">
         <View className="flex-row flex-wrap justify-between">
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Matches</Text><Text className="text-white text-base font-bold">42</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Runs</Text><Text className="text-white text-base font-bold">1,286</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Average</Text><Text className="text-[#23c55e] text-base font-bold">38.7</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Strike Rate</Text><Text className="text-[#23c55e] text-base font-bold">142.4</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Matches</Text><Text className="text-white text-base font-bold">{battingStats.matches}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Runs</Text><Text className="text-white text-base font-bold">{battingStats.runs.toLocaleString()}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Average</Text><Text className="text-[#23c55e] text-base font-bold">{battingStats.average}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Strike Rate</Text><Text className="text-[#23c55e] text-base font-bold">{battingStats.strikeRate}</Text></View>
         </View>
         <View className="h-[1px] bg-[#222222] my-3" />
         <View className="flex-row flex-wrap justify-between">
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Highest Score</Text><Text className="text-white text-base font-bold">86*</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">50s</Text><Text className="text-white text-base font-bold">12</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">100s</Text><Text className="text-white text-base font-bold">2</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">4s</Text><Text className="text-white text-base font-bold">134</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">6s</Text><Text className="text-white text-base font-bold">58</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Highest Score</Text><Text className="text-white text-base font-bold">{battingStats.highestScore}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">50s</Text><Text className="text-white text-base font-bold">{battingStats.fifties}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">100s</Text><Text className="text-white text-base font-bold">{battingStats.hundreds}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">4s</Text><Text className="text-white text-base font-bold">{battingStats.fours}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">6s</Text><Text className="text-white text-base font-bold">{battingStats.sixes}</Text></View>
         </View>
       </View>
 
@@ -634,25 +660,31 @@ export default function ProfileScreen({ route }) {
           <MaterialCommunityIcons name="cricket" size={18} color={theme.subText} style={{ marginRight: 8 }} />
           <Text className="text-white text-base font-bold">Bowling</Text>
         </View>
-        <View className="flex-row items-center bg-[#121212] border border-[#222222] px-2.5 py-1 rounded-md">
-          <Text className="text-white text-[11px] mr-1.5">All Formats</Text>
+        <TouchableOpacity 
+          onPress={() => {
+            const nextIdx = (MATCH_FILTERS.indexOf(activeMatchFilter) + 1) % MATCH_FILTERS.length;
+            setActiveMatchFilter(MATCH_FILTERS[nextIdx]);
+          }}
+          className="flex-row items-center bg-[#121212] border border-[#222222] px-2.5 py-1 rounded-md"
+        >
+          <Text className="text-white text-[11px] mr-1.5">{activeMatchFilter === 'All' ? 'All Formats' : activeMatchFilter}</Text>
           <Feather name="chevron-down" size={14} color={theme.subText} />
-        </View>
+        </TouchableOpacity>
       </View>
       <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 mx-4 mb-4">
         <View className="flex-row flex-wrap justify-between">
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Matches</Text><Text className="text-white text-base font-bold">42</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Overs</Text><Text className="text-white text-base font-bold">126.4</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Wickets</Text><Text className="text-[#23c55e] text-base font-bold">58</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Economy</Text><Text className="text-[#23c55e] text-base font-bold">7.2</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Average</Text><Text className="text-white text-base font-bold">17.9</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Matches</Text><Text className="text-white text-base font-bold">{bowlingStats.matches}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Overs</Text><Text className="text-white text-base font-bold">{bowlingStats.oversDisplay}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Wickets</Text><Text className="text-[#23c55e] text-base font-bold">{bowlingStats.wickets}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Economy</Text><Text className="text-[#23c55e] text-base font-bold">{bowlingStats.economy}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Average</Text><Text className="text-white text-base font-bold">{bowlingStats.average}</Text></View>
         </View>
         <View className="h-[1px] bg-[#222222] my-3" />
         <View className="flex-row flex-wrap justify-between">
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Best Bowling</Text><Text className="text-white text-base font-bold">4/18</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">5 Wickets</Text><Text className="text-white text-base font-bold">1</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Maiden Overs</Text><Text className="text-white text-base font-bold">6</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Dot Balls</Text><Text className="text-white text-base font-bold">312</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Best Bowling</Text><Text className="text-white text-base font-bold">{bowlingStats.bestBowling}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">5 Wickets</Text><Text className="text-white text-base font-bold">{bowlingStats.fiveWickets}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Maiden Overs</Text><Text className="text-white text-base font-bold">{bowlingStats.maidens}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Dot Balls</Text><Text className="text-white text-base font-bold">{bowlingStats.dots}</Text></View>
         </View>
       </View>
 
@@ -665,10 +697,10 @@ export default function ProfileScreen({ route }) {
       </View>
       <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 mx-4 mb-4">
         <View className="flex-row flex-wrap justify-between">
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Catches</Text><Text className="text-[#23c55e] text-base font-bold">32</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Run Outs</Text><Text className="text-white text-base font-bold">7</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Stumpings</Text><Text className="text-white text-base font-bold">3</Text></View>
-          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Direct Hits</Text><Text className="text-white text-base font-bold">2</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Catches</Text><Text className="text-[#23c55e] text-base font-bold">{fieldingStats.catches}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Run Outs</Text><Text className="text-white text-base font-bold">{fieldingStats.runOuts}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Stumpings</Text><Text className="text-white text-base font-bold">{fieldingStats.stumpings}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Direct Hits</Text><Text className="text-white text-base font-bold">{fieldingStats.directHits}</Text></View>
         </View>
       </View>
     </View>
@@ -682,17 +714,23 @@ export default function ProfileScreen({ route }) {
       {/* Match Summary */}
       <View className="flex-row justify-between items-center px-4 mb-3 mt-2">
         <Text className="text-white text-base font-bold">Match Summary</Text>
-        <View className="flex-row items-center bg-[#121212] border border-[#222222] px-2.5 py-1 rounded-md">
-          <Text className="text-white text-[11px] mr-1.5">All Formats</Text>
+        <TouchableOpacity 
+          onPress={() => {
+            const nextIdx = (MATCH_FILTERS.indexOf(activeMatchFilter) + 1) % MATCH_FILTERS.length;
+            setActiveMatchFilter(MATCH_FILTERS[nextIdx]);
+          }}
+          className="flex-row items-center bg-[#121212] border border-[#222222] px-2.5 py-1 rounded-md"
+        >
+          <Text className="text-white text-[11px] mr-1.5">{activeMatchFilter === 'All' ? 'All Formats' : activeMatchFilter}</Text>
           <Feather name="chevron-down" size={14} color={theme.subText} />
-        </View>
+        </TouchableOpacity>
       </View>
       <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 mx-4 mb-4">
         <View className="flex-row flex-wrap justify-between">
-          <View className="items-center w-[22%] mb-3"><Ionicons name="trophy-outline" size={18} color={theme.subText} style={{marginBottom:4}}/><Text className="text-[#888888] text-[10px] mb-1">Matches</Text><Text className="text-white text-base font-bold">42</Text></View>
-          <View className="items-center w-[22%] mb-3"><Ionicons name="medal-outline" size={18} color={theme.subText} style={{marginBottom:4}}/><Text className="text-[#888888] text-[10px] mb-1">Won</Text><Text className="text-white text-base font-bold">26</Text></View>
-          <View className="items-center w-[22%] mb-3"><Feather name="bar-chart-2" size={18} color={theme.subText} style={{marginBottom:4}}/><Text className="text-[#888888] text-[10px] mb-1">Win %</Text><Text className="text-white text-base font-bold">61.9%</Text></View>
-          <View className="items-center w-[22%] mb-3"><Feather name="star" size={18} color={theme.subText} style={{marginBottom:4}}/><Text className="text-[#888888] text-[10px] mb-1">POTM</Text><Text className="text-white text-base font-bold">8</Text></View>
+          <View className="items-center w-[22%] mb-3"><Ionicons name="trophy-outline" size={18} color={theme.subText} style={{marginBottom:4}}/><Text className="text-[#888888] text-[10px] mb-1">Matches</Text><Text className="text-white text-base font-bold">{matchSummary.matches}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Ionicons name="medal-outline" size={18} color={theme.subText} style={{marginBottom:4}}/><Text className="text-[#888888] text-[10px] mb-1">Won</Text><Text className="text-white text-base font-bold">{matchSummary.won}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Feather name="bar-chart-2" size={18} color={theme.subText} style={{marginBottom:4}}/><Text className="text-[#888888] text-[10px] mb-1">Win %</Text><Text className="text-white text-base font-bold">{matchSummary.winPercentage}</Text></View>
+          <View className="items-center w-[22%] mb-3"><Feather name="star" size={18} color={theme.subText} style={{marginBottom:4}}/><Text className="text-[#888888] text-[10px] mb-1">POTM</Text><Text className="text-white text-base font-bold">{matchSummary.potmCount}</Text></View>
         </View>
       </View>
 
@@ -719,48 +757,60 @@ export default function ProfileScreen({ route }) {
 
       {/* Match List */}
       <View className="px-4 pb-6">
-        {MATCH_HISTORY.map(match => (
-          <View key={match.id} className="bg-[#121212] rounded-xl border border-[#222222] mb-4 overflow-hidden">
-            <View className="flex-row items-center p-3 border-b border-[#222222]">
-              <View className="bg-[#1a1a1a] border border-[#222222] px-1.5 py-0.5 rounded mr-2"><Text className="text-[#23c55e] text-[9px] font-bold">{match.format}</Text></View>
-              <Text className="text-[#888888] text-[11px] flex-1" numberOfLines={1}>{match.league}</Text>
-              <Text className="text-[#888888] text-[10px]">{match.time}</Text>
-            </View>
-            
-            <View className="flex-row p-3">
-              <View className="flex-1 pr-3 justify-center">
-                <View className="flex-row items-center mb-2">
-                  <Image source={{uri: match.logoA}} className="w-6 h-6 rounded-full bg-[#1a1a1a] mr-2" />
-                  <Text className="text-white text-[13px] font-semibold">{match.teamA}</Text>
-                </View>
-                <Text className="text-[#888888] text-[10px] font-bold my-1 pl-2">VS</Text>
-                <View className="flex-row items-center mb-2">
-                  <Image source={{uri: match.logoB}} className="w-6 h-6 rounded-full bg-[#1a1a1a] mr-2" />
-                  <Text className="text-white text-[13px] font-semibold">{match.teamB}</Text>
-                </View>
-                <Text className={`text-[11px] font-bold mt-2 ${match.result.includes('Won') ? 'text-[#23c55e]' : 'text-[#e74c3c]'}`}>{match.result}</Text>
+        {matchHistory && matchHistory.length > 0 ? (
+          matchHistory.map(match => (
+            <View key={match.id} className="bg-[#121212] rounded-xl border border-[#222222] mb-4 overflow-hidden">
+              <View className="flex-row items-center p-3 border-b border-[#222222]">
+                <View className="bg-[#1a1a1a] border border-[#222222] px-1.5 py-0.5 rounded mr-2"><Text className="text-[#23c55e] text-[9px] font-bold">{match.format}</Text></View>
+                <Text className="text-[#888888] text-[11px] flex-1" numberOfLines={1}>{match.league}</Text>
+                <Text className="text-[#888888] text-[10px]">{match.time}</Text>
               </View>
+              
+              <View className="flex-row p-3">
+                <View className="flex-1 pr-3 justify-center">
+                  <View className="flex-row items-center mb-2">
+                    <Image source={{uri: match.logoA}} className="w-6 h-6 rounded-full bg-[#1a1a1a] mr-2" />
+                    <Text className="text-white text-[13px] font-semibold" numberOfLines={1}>{match.teamA}</Text>
+                  </View>
+                  <Text className="text-[#888888] text-[10px] font-bold my-1 pl-2">VS</Text>
+                  <View className="flex-row items-center mb-2">
+                    <Image source={{uri: match.logoB}} className="w-6 h-6 rounded-full bg-[#1a1a1a] mr-2" />
+                    <Text className="text-white text-[13px] font-semibold" numberOfLines={1}>{match.teamB}</Text>
+                  </View>
+                  <Text className={`text-[11px] font-bold mt-2 ${match.result.includes('Won') ? 'text-[#23c55e]' : (match.result.includes('Tied') ? 'text-[#eab308]' : 'text-[#e74c3c]')}`}>{match.result}</Text>
+                </View>
 
-              <View className="w-[140px] bg-[#1a1a1a] rounded-lg border border-[#222222] p-2.5 relative">
-                <View className="flex-row justify-between items-center mb-2">
-                  <Text className="text-[#888888] text-[9px] uppercase tracking-wider">Your Performance</Text>
-                  {match.potm && <View className="flex-row items-center bg-[#f1c40f]/15 px-1 py-0.5 rounded"><Ionicons name="star" size={10} color="#f1c40f"/><Text className="text-[#f1c40f] text-[8px] font-bold ml-0.5">POTM</Text></View>}
+                <View className="w-[140px] bg-[#1a1a1a] rounded-lg border border-[#222222] p-2.5 relative">
+                  <View className="flex-row justify-between items-center mb-2">
+                    <Text className="text-[#888888] text-[9px] uppercase tracking-wider">Your Performance</Text>
+                    {match.potm && <View className="flex-row items-center bg-[#f1c40f]/15 px-1 py-0.5 rounded"><Ionicons name="star" size={10} color="#f1c40f"/><Text className="text-[#f1c40f] text-[8px] font-bold ml-0.5">POTM</Text></View>}
+                  </View>
+                  <View className="flex-row items-baseline">
+                    <Text className="text-white text-lg font-bold">{match.myScore}</Text>
+                    {match.myBalls && match.myBalls !== '0' ? <Text className="text-[#888888] text-[11px]"> ({match.myBalls})</Text> : null}
+                  </View>
+                  <Text className="text-[#888888] text-[10px] mt-1">{match.extraInfo ? match.extraInfo : `${match.myFours || 0} Fours • ${match.mySixes || 0} Sixes`}</Text>
+                  <Feather name="chevron-right" size={16} color={theme.subText} style={{ position: 'absolute', right: 12, top: '50%' }} />
                 </View>
-                <View className="flex-row items-baseline">
-                  <Text className="text-white text-lg font-bold">{match.myScore}</Text>
-                  <Text className="text-[#888888] text-[11px]"> ({match.myBalls})</Text>
-                </View>
-                <Text className="text-[#888888] text-[10px] mt-1">{match.extraInfo ? match.extraInfo : `${match.myFours} Fours • ${match.mySixes} Sixes`}</Text>
-                <Feather name="chevron-right" size={16} color={theme.subText} style={{ position: 'absolute', right: 12, top: '50%' }} />
               </View>
             </View>
+          ))
+        ) : (
+          <View className="bg-[#121212] rounded-xl border border-[#222222] p-6 items-center justify-center my-2">
+            <MaterialCommunityIcons name="cricket" size={28} color={theme.subText} style={{ marginBottom: 8 }} />
+            <Text className="text-white text-sm font-bold">No Completed Matches</Text>
+            <Text className="text-[#888888] text-xs text-center mt-1">
+              {activeMatchFilter !== 'All' ? `No ${activeMatchFilter} matches found.` : 'Play and complete matches to see your match history here.'}
+            </Text>
           </View>
-        ))}
+        )}
 
-        <TouchableOpacity className="bg-[#121212] border border-[#222222] rounded-lg py-3 flex-row justify-center items-center">
-          <Text className="text-white text-xs font-bold mr-1">View All Matches</Text>
-          <Feather name="chevron-right" size={16} color={theme.subText} />
-        </TouchableOpacity>
+        {matchHistory && matchHistory.length > 0 && (
+          <TouchableOpacity className="bg-[#121212] border border-[#222222] rounded-lg py-3 flex-row justify-center items-center">
+            <Text className="text-white text-xs font-bold mr-1">View All Matches</Text>
+            <Feather name="chevron-right" size={16} color={theme.subText} />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -811,33 +861,39 @@ export default function ProfileScreen({ route }) {
           {post.image && <Image source={{ uri: post.image }} className="w-full h-[200px] rounded-xl bg-[#1a1a1a] mb-3" />}
 
           {/* Performance Embed */}
-          {post.isPerformance && (
+          {post.isPerformance && recentPerformance.length > 0 && (
             <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 mb-3">
-              <View className="flex-row items-center mb-3">
-                <Ionicons name="trophy" size={14} color="#f1c40f" style={{ marginRight: 6 }}/>
-                <Text className="text-[#23c55e] text-xs font-bold">Player of the Match</Text>
-              </View>
+              {recentPerformance[0].potm && (
+                <View className="flex-row items-center mb-3">
+                  <Ionicons name="trophy" size={14} color="#f1c40f" style={{ marginRight: 6 }}/>
+                  <Text className="text-[#23c55e] text-xs font-bold">Player of the Match</Text>
+                </View>
+              )}
               <View className="flex-row justify-between items-center">
                 <View>
                   <View className="flex-row items-baseline">
-                    <Text className="text-white text-lg font-bold">86*</Text>
-                    <Text className="text-[#888888] text-[11px]"> (52)</Text>
+                    <Text className="text-white text-lg font-bold">{recentPerformance[0].score}</Text>
+                    {recentPerformance[0].balls && recentPerformance[0].balls !== '0' ? (
+                      <Text className="text-[#888888] text-[11px]"> ({recentPerformance[0].balls})</Text>
+                    ) : null}
                   </View>
-                  <Text className="text-[#888888] text-[10px] mt-1">7 Fours • 3 Sixes</Text>
+                  <Text className="text-[#888888] text-[10px] mt-1">
+                    {recentPerformance[0].overs ? recentPerformance[0].overs : `${recentPerformance[0].fours || 0} Fours • ${recentPerformance[0].sixes || 0} Sixes`}
+                  </Text>
                 </View>
                 <View className="items-center">
                   <View className="flex-row items-center mb-1">
-                    <Image source={{uri: 'https://ui-avatars.com/api/?name=RS&background=b9770e&color=fff'}} className="w-5 h-5 rounded-full mr-1.5" />
-                    <Text className="text-white text-xs font-bold">vs Royal Strikers</Text>
+                    <Image source={{uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(recentPerformance[0].vs || 'OP')}&background=b9770e&color=fff`}} className="w-5 h-5 rounded-full mr-1.5" />
+                    <Text className="text-white text-xs font-bold">vs {recentPerformance[0].vs}</Text>
                   </View>
-                  <Text className="text-[#23c55e] text-[11px] font-bold">Won by 6 wickets</Text>
+                  <Text className="text-[#23c55e] text-[11px] font-bold">Match Performance</Text>
                 </View>
                 <View className="items-center">
                   <View className="flex-row items-center mb-1">
                     <Feather name="calendar" size={12} color={theme.subText} style={{ marginRight: 4 }} />
-                    <Text className="text-[#888888] text-[11px]">Yesterday</Text>
+                    <Text className="text-[#888888] text-[11px]">{recentPerformance[0].time}</Text>
                   </View>
-                  <Text className="text-[#888888] text-[11px]">T20 League</Text>
+                  <Text className="text-[#888888] text-[11px]">Match Record</Text>
                 </View>
               </View>
             </View>

@@ -757,6 +757,38 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       wicketkeeper,
     };
 
+    // Calculate Player of the Match from both innings scorecard
+    let bestPlayer = null;
+    let bestPoints = -1;
+
+    const evaluatePoints = (innings) => {
+      if (!innings) return;
+      (innings.batters || []).forEach((b) => {
+        const runs = Number(b.runs) || 0;
+        let pts = runs;
+        if (runs >= 100) pts += 20;
+        else if (runs >= 50) pts += 10;
+        if (pts > bestPoints) {
+          bestPoints = pts;
+          bestPlayer = { id: b.id, name: b.name };
+        }
+      });
+      const bowlersMap = innings.bowlers || {};
+      Object.keys(bowlersMap).forEach((bId) => {
+        const b = bowlersMap[bId];
+        const w = Number(b.wickets) || 0;
+        let pts = w * 25;
+        if (w >= 5) pts += 25;
+        if (pts > bestPoints) {
+          bestPoints = pts;
+          bestPlayer = { id: bId, name: b.name };
+        }
+      });
+    };
+
+    evaluatePoints(inn1);
+    evaluatePoints(inn2);
+
     const finalResult = {
       winner,
       margin,
@@ -765,6 +797,9 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       firstInnings: inn1,
       secondInnings: inn2,
       superOvers: superOversList || superOvers,
+      potm: bestPlayer,
+      potmId: bestPlayer?.id || null,
+      completedAt: new Date().toISOString(),
     };
 
     setMatchResult(finalResult);
@@ -781,6 +816,9 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         firstInnings: inn1,
         secondInnings: inn2,
         superOvers: finalResult.superOvers,
+        potm: finalResult.potm,
+        potmId: finalResult.potmId,
+        completedAt: finalResult.completedAt,
       });
     }
 
@@ -1403,12 +1441,27 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     const dismissedBatter = noBallRunOutBatter === 'striker' ? striker : nonStriker;
     const newFallOfWickets = [
       ...fallOfWickets,
-      { wicket: newWickets, score: newTotal, batter: dismissedBatter.name },
+      {
+        wicket: newWickets,
+        score: newTotal,
+        batter: dismissedBatter.name,
+        batterId: dismissedBatter.id,
+        dismissalType: 'Run Out',
+        bowler: bowler.name,
+        bowlerId: bowler.id,
+      },
     ];
     setFallOfWickets(newFallOfWickets);
 
     let updatedBattersScorecard = battersScorecard.map((b) =>
-      b.id === dismissedBatter.id ? { ...b, status: 'out', dismissal: 'run out' } : b
+      b.id === dismissedBatter.id ? {
+        ...b,
+        status: 'out',
+        dismissal: 'run out',
+        dismissalType: 'Run Out',
+        bowlerId: bowler.id,
+        bowlerName: bowler.name,
+      } : b
     );
 
     const newBallObj = { type: 'wicket', value: 'Nb+W', runs: teamRunsToAdd, isLegal: false };
@@ -1818,6 +1871,12 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         wicket: newWickets,
         score: newRuns,
         batter: dismissedBatter.name,
+        batterId: dismissedBatter.id,
+        dismissalType: selectedDismissal,
+        fielder: selectedFielder?.name || (selectedDismissal === 'Stumped' ? (wicketkeeper?.name || 'Keeper') : null),
+        fielderId: selectedFielder?.id || (selectedDismissal === 'Stumped' ? (wicketkeeper?.id || null) : null),
+        bowler: bowler.name,
+        bowlerId: bowler.id,
       },
     ];
     setFallOfWickets(newFallOfWickets);
@@ -1847,7 +1906,16 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         : `${selectedDismissal}`;
 
     let updatedBattersScorecard = battersScorecard.map((b) =>
-      b.id === dismissedBatter.id ? { ...b, status: 'out', dismissal: dismissalText } : b
+      b.id === dismissedBatter.id ? {
+        ...b,
+        status: 'out',
+        dismissal: dismissalText,
+        dismissalType: selectedDismissal,
+        bowlerId: bowler.id,
+        bowlerName: bowler.name,
+        fielderId: selectedFielder?.id || (selectedDismissal === 'Stumped' ? (wicketkeeper?.id || null) : null),
+        fielderName: selectedFielder?.name || (selectedDismissal === 'Stumped' ? (wicketkeeper?.name || 'Keeper') : null),
+      } : b
     );
 
     const isBowlerWicket = !['Run Out', 'Obstructing the Field', 'Timed Out', 'Retired Hurt', 'Retired Out'].includes(selectedDismissal);
