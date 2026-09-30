@@ -2,6 +2,7 @@ import React from 'react';
 import { View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 
 // Import ALL our real Screens!
@@ -15,6 +16,7 @@ const Tab = createBottomTabNavigator();
 
 export default function MainTabs() {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
@@ -26,8 +28,8 @@ export default function MainTabs() {
           backgroundColor: '#121212', 
           borderTopWidth: 1,
           borderTopColor: '#222',
-          height: 65,
-          paddingBottom: 8,
+          height: 65 + insets.bottom,
+          paddingBottom: 8 + insets.bottom,
           paddingTop: 8,
           elevation: 0,
         },

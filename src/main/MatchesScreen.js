@@ -53,8 +53,10 @@ export default function MatchesScreen() {
       oversA: m.oversA || '20.0 Ov',
       scoreB: m.scoreB || '166/4',
       oversB: m.oversB || '18.2 Ov',
-      winner: m.winner ? (m.margin === 'Super Over' ? `${m.winner} won via Super Over` : `${m.winner} won`) : 'Match Completed',
-      margin: m.margin === 'Super Over' ? '' : (m.margin || ''),
+      winner: m.winner
+        ? (m.margin === 'Super Over' ? `${m.winner} won via Super Over` : `${m.winner} won`)
+        : (m.result === 'DRAW' || m.margin === 'Draw' ? 'Match Drawn' : 'Match Completed'),
+      margin: (m.margin === 'Super Over' || m.margin === 'Draw') ? '' : (m.margin || ''),
       venue: m.venue || 'Rajiv Cricket Ground, Hyderabad',
       matchData: m,
     }));
@@ -333,7 +335,10 @@ export default function MatchesScreen() {
           <Text className="text-[#888888] text-[11px] ml-[6px]">{match.venue}</Text>
         </View>
         <View className="flex-row items-center">
-          <TouchableOpacity className="border border-[#1a4024] px-3 py-1 rounded-xl mr-2">
+          <TouchableOpacity 
+            onPress={() => match.matchData && navigation.navigate('LiveScoring', { matchData: match.matchData })}
+            className="border border-[#1a4024] px-3 py-1 rounded-xl mr-2"
+          >
             <Text className="text-[#23c55e] text-[11px] font-semibold">Scorecard</Text>
           </TouchableOpacity>
           <Feather name="chevron-right" size={16} color="#888888" />

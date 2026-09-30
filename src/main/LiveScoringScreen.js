@@ -95,7 +95,25 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
   // First Innings Record & Match Completion State
   const [firstInningsSummary, setFirstInningsSummary] = useState(null);
-  const [matchResult, setMatchResult] = useState(null);
+  const [matchResult, setMatchResult] = useState(
+    matchParam?.status === 'Completed'
+      ? {
+          winner: matchParam.winner || null,
+          margin: matchParam.margin || (matchParam.result === 'DRAW' ? 'Draw' : ''),
+          result: matchParam.result || (matchParam.winner ? 'WIN' : 'DRAW'),
+          resultText:
+            matchParam.resultText ||
+            (matchParam.result === 'DRAW' || matchParam.margin === 'Draw'
+              ? 'Match Tied • Ended as Draw'
+              : matchParam.winner
+              ? `${matchParam.winner} won`
+              : 'Match Completed'),
+          firstInnings: matchParam.firstInnings || null,
+          secondInnings: matchParam.secondInnings || null,
+          superOvers: matchParam.superOvers || [],
+        }
+      : null
+  );
   const [scorecardInningsTab, setScorecardInningsTab] = useState(1); // 1 | 2 | 3 for final scorecard
 
   // Active Batting and Bowling Squads for the active innings
@@ -235,7 +253,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const [historyStack, setHistoryStack] = useState([]);
 
   // Active sub-screen/modal state
-  const [currentScreen, setCurrentScreen] = useState('MAIN');
+  const [currentScreen, setCurrentScreen] = useState(
+    matchParam?.status === 'Completed' ? 'MATCH_RESULT' : 'MAIN'
+  );
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showEditLastBallModal, setShowEditLastBallModal] = useState(false);
 
@@ -696,6 +717,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const handleMatchComplete = ({
     winner,
     margin,
+    result,
     resultText,
     finalRuns,
     finalWickets,
@@ -738,7 +760,8 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     const finalResult = {
       winner,
       margin,
-      resultText: resultText || (winner ? `${winner} won by ${margin}` : 'Match Tied!'),
+      result: result || (winner ? 'WIN' : (margin === 'Draw' ? 'DRAW' : 'TIED')),
+      resultText: resultText || (winner ? `${winner} won by ${margin}` : (margin === 'Draw' ? 'Match Tied • Ended as Draw' : 'Match Tied!')),
       firstInnings: inn1,
       secondInnings: inn2,
       superOvers: superOversList || superOvers,
@@ -751,13 +774,43 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         status: 'Completed',
         winner: finalResult.winner,
         margin: finalResult.margin,
+        result: finalResult.result,
+        resultText: finalResult.resultText,
         scoreB: `${inn2.totalRuns}/${inn2.totalWickets}`,
         oversB: `${inn2.overs} Ov`,
+        firstInnings: inn1,
+        secondInnings: inn2,
         superOvers: finalResult.superOvers,
       });
     }
 
     setCurrentScreen('MATCH_RESULT');
+  };
+
+  const handleEndMatchAsDraw = () => {
+    if (isProcessingAction) return;
+    Alert.alert(
+      'End Match as Draw?',
+      'This match is tied. Are you sure you want to end the match as a draw instead of playing a Super Over?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'End as Draw',
+          style: 'destructive',
+          onPress: () => {
+            setIsProcessingAction(true);
+            handleMatchComplete({
+              winner: null,
+              margin: 'Draw',
+              result: 'DRAW',
+              resultText: 'Match Tied • Ended as Draw',
+              superOversList: [],
+            });
+            setTimeout(() => setIsProcessingAction(false), 500);
+          },
+        },
+      ]
+    );
   };
 
   const checkDeliveryProgress = (newTotalRuns, newTotalWickets, nextBallsInOver, nextOverNum, isOverEnd, customBatters, customBowlers, customPastOvers) => {
@@ -3488,7 +3541,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           <Text className="text-white text-base font-bold ml-4">Match Tied</Text>
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: 120 + bottomInset, alignItems: 'center' }}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: 180 + bottomInset, alignItems: 'center' }}>
           {/* Badge */}
           <View className="w-20 h-20 rounded-full bg-[#eab308]/15 border-2 border-[#eab308] items-center justify-center mb-4">
             <Ionicons name="git-compare" size={36} color="#eab308" />
@@ -3538,10 +3591,24 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f]"
         >
           <TouchableOpacity
-            onPress={() => startSuperOverFlow(1)}
-            className="bg-[#23c55e] py-4 rounded-xl items-center"
+            disabled={isProcessingAction}
+            onPress={() => {
+              if (isProcessingAction) return;
+              setIsProcessingAction(true);
+              startSuperOverFlow(1);
+              setTimeout(() => setIsProcessingAction(false), 500);
+            }}
+            className="bg-[#23c55e] py-4 rounded-xl items-center mb-3"
           >
             <Text className="text-black text-sm font-black tracking-wider">SUPER OVER</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            disabled={isProcessingAction}
+            onPress={handleEndMatchAsDraw}
+            className="py-3.5 rounded-xl items-center border border-[#333333] bg-transparent"
+          >
+            <Text className="text-[#888888] text-sm font-bold">End Match as Draw</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -4030,9 +4097,21 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
 
         <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 110 + bottomInset }}>
           {/* Winner Banner Card */}
-          <View className="bg-[#121212] rounded-2xl border border-[#23c55e]/50 p-6 items-center mb-5">
-            <View className="w-16 h-16 rounded-full bg-[#23c55e]/15 border-2 border-[#23c55e] items-center justify-center mb-3">
-              <Ionicons name="trophy" size={32} color="#23c55e" />
+          <View
+            className={`bg-[#121212] rounded-2xl border ${
+              res.winner ? 'border-[#23c55e]/50' : 'border-[#eab308]/50'
+            } p-6 items-center mb-5`}
+          >
+            <View
+              className={`w-16 h-16 rounded-full ${
+                res.winner ? 'bg-[#23c55e]/15 border-[#23c55e]' : 'bg-[#eab308]/15 border-[#eab308]'
+              } border-2 items-center justify-center mb-3`}
+            >
+              <Ionicons
+                name={res.winner ? 'trophy' : 'git-compare'}
+                size={32}
+                color={res.winner ? '#23c55e' : '#eab308'}
+              />
             </View>
             <Text className="text-white text-xl font-black text-center mb-1">
               {res.resultText}
