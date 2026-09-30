@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, Modal, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Image, Modal, Alert, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorageRaw from '@react-native-async-storage/async-storage';
+const AsyncStorage = AsyncStorageRaw?.default || AsyncStorageRaw;
 import { useAuthStore } from '../store/authStore';
+import { getUserById, updateUserProfile } from '../store/userRepository';
 
 const theme = {
   bg: '#0a0a0a',
@@ -20,23 +22,8 @@ const theme = {
 };
 
 // ==========================================
-// MOCK DATA
+// MATCH / PERFORMANCE DISPLAY DATA (Unchanged per task instructions)
 // ==========================================
-const PROFILE = {
-  name: 'Rahul Kumar',
-  username: '@rahulkumar',
-  location: 'Hyderabad, India',
-  role: 'All-Rounder',
-  batting: 'Right-Handed',
-  bowling: 'Right-Arm Medium',
-  avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80',
-  followers: '2.4K',
-  following: '386',
-  posts: '42',
-  experience: 'College • Club • Turf',
-  primaryTeam: 'Falcons CC',
-};
-
 const RECENT_PERFORMANCE = [
   { id: '1', score: '86*', balls: '52', fours: 7, sixes: 3, vs: 'Royal Strikers', potm: true, time: 'Yesterday', icon: 'cricket-bat' },
   { id: '2', score: '42', balls: '31', fours: 5, sixes: 1, vs: 'Warriors XI', potm: false, time: '3 days ago', icon: 'cricket-bat' },
@@ -58,7 +45,7 @@ const MATCH_HISTORY = [
 ];
 
 const POSTS_FEED = [
-  { id: 'p1', text: "Big match tonight! 💪\nLet's go Falcons! 🦅🔥", time: '2h', image: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', likes: 128, comments: 24, shares: 12 },
+  { id: 'p1', text: "Big match tonight! 💪\nLet's go team! 🦅🔥", time: '2h', image: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', likes: 128, comments: 24, shares: 12 },
   { id: 'p2', text: "Happy to contribute to the team's win today. 🙌\nGood team effort all around! 💚", time: '1d', isPerformance: true, likes: 96, comments: 18, shares: 8 },
   { id: 'p3', text: "Great practice session today!\nAlways working to get better. 🏏", time: '3d', images: [
     'https://images.unsplash.com/photo-1593341646782-e0b495cff86d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80',
@@ -67,20 +54,101 @@ const POSTS_FEED = [
   ], likes: 78, comments: 14, shares: 6 }
 ];
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ route }) {
   const navigation = useNavigation();
+  
+  // 1. Connect to Auth Store
+  const accountData = useAuthStore((state) => state.accountData);
+  const sportProfiles = useAuthStore((state) => state.sportProfiles);
+  const activeSport = useAuthStore((state) => state.activeSport);
+  const updateAccountData = useAuthStore((state) => state.updateAccountData);
+  const updateActiveSportProfile = useAuthStore((state) => state.updateActiveSportProfile);
   const logout = useAuthStore((state) => state.logout);
+
+  // Authenticated user unique ID vs Profile owner unique ID (Requirement 3: strictly compare IDs)
+  const currentUserId = accountData?.id;
+  const profileOwnerId = route?.params?.userId || route?.params?.id || route?.params?.profileOwnerId || currentUserId;
+  const isOwnProfile = Boolean(currentUserId && profileOwnerId && currentUserId === profileOwnerId);
+
+  // 2. Component State
+  const [profileData, setProfileData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Overview');
   const TABS = ['Overview', 'Stats', 'Matches', 'Posts'];
   const MATCH_FILTERS = ['All', 'T20', 'ODI', 'T10', 'Turf', 'College'];
   const [activeMatchFilter, setActiveMatchFilter] = useState('All');
 
-  // 3-dot menu and logout state
+  // Modals state
   const [showMenuModal, setShowMenuModal] = useState(false);
   const [showLogoutConfirmModal, setShowLogoutConfirmModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  // Logout handler using existing auth system
+  // Edit Profile Modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editUsername, setEditUsername] = useState('');
+  const [editLocation, setEditLocation] = useState('');
+  const [editRole, setEditRole] = useState('Batsman');
+  const [editBatting, setEditBatting] = useState('Right-Handed');
+  const [editBowling, setEditBowling] = useState('None');
+  const [editExperience, setEditExperience] = useState('Club');
+  const [editTeam, setEditTeam] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Fetch real profile on mount or user change
+  useEffect(() => {
+    let isMounted = true;
+    async function loadUserProfile() {
+      const targetId = profileOwnerId;
+      if (!targetId) {
+        setIsLoading(false);
+        return;
+      }
+      try {
+        const stored = await getUserById(targetId);
+        if (isMounted) {
+          if (stored) {
+            setProfileData(stored);
+          }
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error('Failed to load profile from repository:', err);
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    loadUserProfile();
+    return () => { isMounted = false; };
+  }, [profileOwnerId]);
+
+  // Derived Effective User Profile from single source of truth
+  const effectiveAccount = isOwnProfile
+    ? { ...profileData?.account, ...accountData }
+    : (profileData?.account || accountData);
+
+  const effectiveProfiles = isOwnProfile
+    ? ((sportProfiles && sportProfiles.length > 0) ? sportProfiles : (profileData?.sportProfiles || []))
+    : (profileData?.sportProfiles || []);
+  const activeProfile = effectiveProfiles.find(p => p.sport === (activeSport || 'Cricket')) || effectiveProfiles[0] || {};
+
+  const name = effectiveAccount?.name || effectiveAccount?.fullName || 'Cricket Player';
+  const rawUsername = (effectiveAccount?.username || 'player').replace(/^@/, '');
+  const username = `@${rawUsername}`;
+  const location = effectiveAccount?.location || activeProfile?.location || '';
+  const role = activeProfile?.role || 'Batsman';
+  const batting = activeProfile?.battingStyle || activeProfile?.batting || 'Right-Handed';
+  const bowling = activeProfile?.bowlingStyle || activeProfile?.bowling || 'None';
+  const experience = Array.isArray(activeProfile?.experience)
+    ? activeProfile.experience.join(' • ')
+    : (activeProfile?.experience || 'Not specified');
+  const primaryTeam = activeProfile?.primaryTeam || (activeProfile?.teams && activeProfile.teams.length > 0 ? activeProfile.teams[0].name : '');
+  const teams = activeProfile?.teams || [];
+  const avatar = effectiveAccount?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e3a29&color=23c55e`;
+  const followers = effectiveAccount?.followers ?? 0;
+  const following = effectiveAccount?.following ?? 0;
+  const posts = effectiveAccount?.posts ?? 0;
+
+  // Logout handler
   const handleLogout = async () => {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
@@ -88,7 +156,7 @@ export default function ProfileScreen() {
       // 1. Wipe session from Zustand auth store
       logout();
 
-      // 2. Clear any persisted session data from AsyncStorage
+      // 2. Clear active session in AsyncStorage
       await AsyncStorage.removeItem('sports-app-auth');
 
       // 3. Close modals
@@ -102,6 +170,97 @@ export default function ProfileScreen() {
     }
   };
 
+  // Open Edit Profile modal with current values
+  const handleOpenEditModal = () => {
+    setShowMenuModal(false);
+    setEditName(name);
+    setEditUsername(rawUsername);
+    setEditLocation(location);
+    setEditRole(role);
+    setEditBatting(batting);
+    setEditBowling(bowling);
+    setEditExperience(experience);
+    setEditTeam(primaryTeam);
+    setShowEditModal(true);
+  };
+
+  // Save edited profile
+  const handleSaveProfile = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      const updatedAccount = {
+        name: editName.trim() || name,
+        username: editUsername.trim().replace(/^@/, '') || rawUsername,
+        location: editLocation.trim(),
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(editName.trim() || name)}&background=1e3a29&color=23c55e`,
+      };
+
+      const updatedSportProfile = {
+        role: editRole,
+        battingStyle: editBatting,
+        bowlingStyle: editBowling,
+        experience: editExperience,
+        primaryTeam: editTeam.trim() || primaryTeam,
+      };
+
+      // 1. Persist to storage repository
+      if (effectiveAccount?.id) {
+        await updateUserProfile(effectiveAccount.id, updatedAccount, updatedSportProfile);
+      }
+
+      // 2. Update Zustand store
+      updateAccountData(updatedAccount);
+      updateActiveSportProfile(updatedSportProfile);
+
+      // 3. Update local state
+      setProfileData(prev => ({
+        ...prev,
+        account: { ...prev?.account, ...updatedAccount },
+        sportProfiles: (prev?.sportProfiles || []).map(p =>
+          p.sport === (activeSport || 'Cricket') ? { ...p, ...updatedSportProfile } : p
+        ),
+      }));
+
+      setShowEditModal(false);
+    } catch (err) {
+      console.error('Error saving profile changes:', err);
+      Alert.alert('Error', 'Unable to save profile changes.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // ==========================================
+  // LOADING & EMPTY STATES (Per Sections 18 & 19)
+  // ==========================================
+  if (isLoading && !accountData) {
+    return (
+      <SafeAreaView className="flex-1 bg-[#0a0a0a] justify-center items-center">
+        <ActivityIndicator size="large" color="#23c55e" />
+        <Text className="text-[#888888] text-sm mt-3 font-medium">Loading profile...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (!effectiveAccount?.id && !accountData?.id) {
+    return (
+      <SafeAreaView className="flex-1 bg-[#0a0a0a] justify-center items-center px-6">
+        <View className="w-16 h-16 rounded-full bg-[#1a1a1a] border border-[#222222] justify-center items-center mb-4">
+          <Feather name="alert-circle" size={32} color="#23c55e" />
+        </View>
+        <Text className="text-white text-lg font-bold mb-2">No Profile Found</Text>
+        <Text className="text-[#888888] text-sm text-center mb-6">Please log in to view your profile.</Text>
+        <TouchableOpacity
+          onPress={() => logout()}
+          className="bg-[#23c55e] px-6 py-3 rounded-xl"
+        >
+          <Text className="text-black font-bold">Go to Sign In</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
   // ==========================================
   // SHARED HEADER & INFO
   // ==========================================
@@ -110,10 +269,14 @@ export default function ProfileScreen() {
       
       {/* Top Nav */}
       <View className="flex-row justify-between items-center mb-5">
-        <TouchableOpacity onPress={() => navigation.goBack()}><Feather name="chevron-left" size={28} color={theme.text} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Feather name="chevron-left" size={28} color={theme.text} />
+        </TouchableOpacity>
         <Text className="text-white text-base font-bold">Profile</Text>
         <View className="flex-row items-center">
-          <TouchableOpacity style={{ marginRight: 16 }}><Feather name="share-2" size={22} color={theme.text} /></TouchableOpacity>
+          <TouchableOpacity style={{ marginRight: 16 }}>
+            <Feather name="share-2" size={22} color={theme.text} />
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setShowMenuModal(true)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -125,58 +288,90 @@ export default function ProfileScreen() {
 
       {/* Profile Info */}
       <View className="flex-row items-center mb-5">
-        <View className="w-[90px] h-[90px] rounded-full border-2 border-[#23c55e] p-0.5 mr-4">
-          <Image source={{ uri: PROFILE.avatar }} className="w-full h-full rounded-full" />
+        <View className="w-[90px] h-[90px] rounded-full border-2 border-[#23c55e] p-0.5 mr-4 bg-[#121212] overflow-hidden">
+          <Image source={{ uri: avatar }} className="w-full h-full rounded-full" />
         </View>
         <View className="flex-1">
           <View className="flex-row items-center">
-            <Text className="text-white text-xl font-bold">{PROFILE.name}</Text>
+            <Text className="text-white text-xl font-bold">{name}</Text>
             <MaterialCommunityIcons name="check-decagram" size={18} color={theme.primary} style={{ marginLeft: 4 }} />
           </View>
-          <Text className="text-[#888888] text-[13px] mt-0.5 mb-1">{PROFILE.username}</Text>
+          <Text className="text-[#888888] text-[13px] mt-0.5 mb-1">{username}</Text>
+          
           <View className="flex-row items-center mt-1">
             <Feather name="map-pin" size={12} color={theme.subText} />
-            <Text className="text-[#888888] text-xs ml-1">{PROFILE.location}</Text>
+            <Text className="text-[#888888] text-xs ml-1">
+              {location || 'Location not set'}
+            </Text>
           </View>
           
-          <View className="self-start bg-[#23c55e]/15 px-2 py-1 rounded my-2"><Text className="text-[#23c55e] text-[11px] font-bold">{PROFILE.role}</Text></View>
+          <View className="self-start bg-[#23c55e]/15 px-2 py-1 rounded my-2">
+            <Text className="text-[#23c55e] text-[11px] font-bold">{role}</Text>
+          </View>
           
           <View className="flex-row items-center">
             <MaterialCommunityIcons name="cricket-bat" size={14} color={theme.subText} />
-            <Text className="text-[#888888] text-[11px] ml-1">{PROFILE.batting} Batter</Text>
-            <View className="w-[1px] h-3 bg-[#222222] mx-2" />
-            <MaterialCommunityIcons name="cricket" size={14} color={theme.subText} />
-            <Text className="text-[#888888] text-[11px] ml-1">{PROFILE.bowling}</Text>
+            <Text className="text-[#888888] text-[11px] ml-1">{batting} Batter</Text>
+            {bowling && bowling !== 'None' && bowling !== 'none' ? (
+              <>
+                <View className="w-[1px] h-3 bg-[#222222] mx-2" />
+                <MaterialCommunityIcons name="cricket" size={14} color={theme.subText} />
+                <Text className="text-[#888888] text-[11px] ml-1">{bowling}</Text>
+              </>
+            ) : null}
           </View>
         </View>
       </View>
 
       {/* Action Buttons */}
       <View className="flex-row gap-3 mb-5">
-        <TouchableOpacity className="flex-1 flex-row bg-[#23c55e] py-2.5 rounded-lg items-center justify-center">
-          <MaterialCommunityIcons name="chat-outline" size={18} color="#000" style={{ marginRight: 6 }} />
-          <Text className="text-black text-[13px] font-bold">Message</Text>
-        </TouchableOpacity>
+        {isOwnProfile ? (
+          <TouchableOpacity 
+            onPress={handleOpenEditModal}
+            className="flex-1 flex-row bg-[#23c55e] py-2.5 rounded-lg items-center justify-center"
+          >
+            <Feather name="edit-3" size={16} color="#000" style={{ marginRight: 6 }} />
+            <Text className="text-black text-[13px] font-bold">Edit Profile</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('Messages')}
+            className="flex-1 flex-row bg-[#23c55e] py-2.5 rounded-lg items-center justify-center"
+          >
+            <MaterialCommunityIcons name="chat-outline" size={18} color="#000" style={{ marginRight: 6 }} />
+            <Text className="text-black text-[13px] font-bold">Message</Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity className="flex-1 flex-row border border-[#222222] py-2.5 rounded-lg items-center justify-center">
           <Feather name="share-2" size={16} color={theme.text} style={{ marginRight: 6 }} />
           <Text className="text-white text-[13px] font-bold">Share Profile</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Stats Row */}
+      {/* Stats Row - Real Counts (Per Section 14) */}
       <View className="flex-row justify-evenly bg-[#1a1a1a] rounded-xl py-4 mb-6 border border-[#222222]">
         <View className="items-center">
-          <View className="flex-row items-center mb-1"><Feather name="users" size={14} color={theme.subText} /><Text className="text-white text-base font-bold ml-1.5">{PROFILE.followers}</Text></View>
+          <View className="flex-row items-center mb-1">
+            <Feather name="users" size={14} color={theme.subText} />
+            <Text className="text-white text-base font-bold ml-1.5">{followers}</Text>
+          </View>
           <Text className="text-[#888888] text-[11px]">Followers</Text>
         </View>
         <View className="w-[1px] bg-[#222222]" />
         <View className="items-center">
-          <View className="flex-row items-center mb-1"><Feather name="user-check" size={14} color={theme.subText} /><Text className="text-white text-base font-bold ml-1.5">{PROFILE.following}</Text></View>
+          <View className="flex-row items-center mb-1">
+            <Feather name="user-check" size={14} color={theme.subText} />
+            <Text className="text-white text-base font-bold ml-1.5">{following}</Text>
+          </View>
           <Text className="text-[#888888] text-[11px]">Following</Text>
         </View>
         <View className="w-[1px] bg-[#222222]" />
         <View className="items-center">
-          <View className="flex-row items-center mb-1"><Feather name="file-text" size={14} color={theme.subText} /><Text className="text-white text-base font-bold ml-1.5">{PROFILE.posts}</Text></View>
+          <View className="flex-row items-center mb-1">
+            <Feather name="file-text" size={14} color={theme.subText} />
+            <Text className="text-white text-base font-bold ml-1.5">{posts}</Text>
+          </View>
           <Text className="text-[#888888] text-[11px]">Posts</Text>
         </View>
       </View>
@@ -199,160 +394,212 @@ export default function ProfileScreen() {
   // ==========================================
   // TAB 1: OVERVIEW
   // ==========================================
-  const renderOverview = () => (
-    <View className="pt-4">
-      
-      {/* Cricket Identity Card */}
-      <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 mx-4 mb-4">
-        <Text className="text-[#888888] text-[10px] font-bold tracking-widest uppercase mb-3">CRICKET IDENTITY</Text>
-        <View className="flex-row flex-wrap mb-3">
-          <View className="w-1/2 mb-3"><Text className="text-[#888888] text-[11px] mb-1">Role</Text><Text className="text-white text-[13px] font-semibold">{PROFILE.role}</Text></View>
-          <View className="w-1/2 mb-3"><Text className="text-[#888888] text-[11px] mb-1">Batting</Text><Text className="text-white text-[13px] font-semibold">{PROFILE.batting}</Text></View>
-          <View className="w-1/2 mb-3"><Text className="text-[#888888] text-[11px] mb-1">Bowling</Text><Text className="text-white text-[13px] font-semibold">{PROFILE.bowling}</Text></View>
-          <View className="w-1/2 mb-3"><Text className="text-[#888888] text-[11px] mb-1">Experience</Text><Text className="text-white text-[13px] font-semibold">{PROFILE.experience}</Text></View>
-        </View>
-        <View className="flex-row items-center border-t border-[#222222] pt-3">
-          <Image source={{uri: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff'}} className="w-9 h-9 rounded-full bg-[#1a1a1a] mr-3" />
-          <View>
-            <Text className="text-[#888888] text-[11px] mb-1">Primary Team</Text>
-            <Text className="text-white text-[13px] font-semibold">{PROFILE.primaryTeam}</Text>
-          </View>
-        </View>
-      </View>
+  const renderOverview = () => {
+    const teamInitials = primaryTeam ? primaryTeam.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() : 'TM';
+    const primaryTeamLogo = `https://ui-avatars.com/api/?name=${encodeURIComponent(teamInitials)}&background=1e3a29&color=fff`;
 
-      {/* Recent Performance */}
-      <View className="flex-row justify-between items-center px-4 mb-3 mt-2">
-        <Text className="text-white text-base font-bold">Recent Performance</Text>
-        <TouchableOpacity><Text className="text-[#23c55e] text-xs font-bold">See All</Text></TouchableOpacity>
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, marginBottom: 16 }}>
-        {RECENT_PERFORMANCE.map(perf => (
-          <View key={perf.id} className="w-[150px] bg-[#1a1a1a] rounded-xl border border-[#222222] p-3 mr-3">
-            <View className="flex-row justify-between items-start mb-2">
-              <View className="flex-row items-baseline">
-                <Text className="text-[#23c55e] text-xl font-bold">{perf.score}</Text>
-                <Text className="text-[#888888] text-[11px]"> ({perf.balls})</Text>
-              </View>
-              <View className="w-6 h-6 rounded-full bg-[#121212] items-center justify-center"><MaterialCommunityIcons name={perf.icon} size={16} color={theme.subText} /></View>
+    return (
+      <View className="pt-4">
+        
+        {/* Cricket Identity Card */}
+        <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 mx-4 mb-4">
+          <Text className="text-[#888888] text-[10px] font-bold tracking-widest uppercase mb-3">CRICKET IDENTITY</Text>
+          <View className="flex-row flex-wrap mb-3">
+            <View className="w-1/2 mb-3">
+              <Text className="text-[#888888] text-[11px] mb-1">Role</Text>
+              <Text className="text-white text-[13px] font-semibold">{role}</Text>
             </View>
-            <Text className="text-[#888888] text-[11px] mb-0.5">{perf.overs ? perf.overs : `${perf.fours} Fours • ${perf.sixes} Sixes`}</Text>
-            <Text className="text-white text-[11px] mb-2">vs {perf.vs}</Text>
-            {perf.potm && <View className="bg-[#23c55e]/15 px-1.5 py-0.5 rounded self-start mb-2"><Text className="text-[#23c55e] text-[9px] font-bold">Player of the Match</Text></View>}
-            <View className="flex-row justify-between items-center border-t border-[#222222] pt-2 mt-auto">
-              <Text className="text-[#888888] text-[10px]">{perf.time}</Text>
-              <Feather name="chevron-right" size={16} color={theme.subText} />
+            <View className="w-1/2 mb-3">
+              <Text className="text-[#888888] text-[11px] mb-1">Batting</Text>
+              <Text className="text-white text-[13px] font-semibold">{batting}</Text>
+            </View>
+            <View className="w-1/2 mb-3">
+              <Text className="text-[#888888] text-[11px] mb-1">Bowling</Text>
+              <Text className="text-white text-[13px] font-semibold">{bowling || 'None'}</Text>
+            </View>
+            <View className="w-1/2 mb-3">
+              <Text className="text-[#888888] text-[11px] mb-1">Experience</Text>
+              <Text className="text-white text-[13px] font-semibold">{experience}</Text>
             </View>
           </View>
-        ))}
-      </ScrollView>
-
-      {/* Form & Teams Grid */}
-      <View className="flex-row px-4">
-        {/* FORM */}
-        <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 flex-1 mr-2 mb-4">
-          <Text className="text-white text-[13px] font-bold mb-3">Form <Text style={{fontWeight:'normal', color:theme.subText}}>(Last 5 Matches)</Text></Text>
-          <View className="flex-1 flex-row justify-between items-end pt-4">
-            {FORM_DATA.map((data) => {
-              const isWin = data.result === 'W';
-              const barHeight = Math.max((data.score / 100) * 80, 10);
-              return (
-                <View key={data.id} className="items-center">
-                  <Text className="text-white text-[9px] mb-1">{data.score}</Text>
-                  <View 
-                    className={`w-3.5 rounded-t-[2px] mb-1 ${isWin ? 'bg-[#23c55e]' : 'bg-[#e74c3c]'}`} 
-                    style={{ height: barHeight }} 
-                  />
-                  <View className={`border px-1 py-0.5 rounded ${isWin ? 'bg-[#23c55e]/15 border-[#23c55e]' : 'bg-[#e74c3c]/15 border-[#e74c3c]'}`}>
-                    <Text className={`text-[8px] font-bold ${isWin ? 'text-[#23c55e]' : 'text-[#e74c3c]'}`}>{data.result}</Text>
-                  </View>
+          
+          {/* Primary Team Row */}
+          <View className="flex-row items-center border-t border-[#222222] pt-3">
+            {primaryTeam ? (
+              <>
+                <Image source={{ uri: primaryTeamLogo }} className="w-9 h-9 rounded-full bg-[#1a1a1a] mr-3" />
+                <View>
+                  <Text className="text-[#888888] text-[11px] mb-1">Primary Team</Text>
+                  <Text className="text-white text-[13px] font-semibold">{primaryTeam}</Text>
                 </View>
-              )
-            })}
+              </>
+            ) : (
+              <View className="flex-row items-center">
+                <View className="w-9 h-9 rounded-full bg-[#1a1a1a] border border-[#222222] justify-center items-center mr-3">
+                  <Feather name="shield" size={16} color={theme.subText} />
+                </View>
+                <View>
+                  <Text className="text-[#888888] text-[11px] mb-1">Primary Team</Text>
+                  <Text className="text-[#666666] text-[13px] italic">No primary team</Text>
+                </View>
+              </View>
+            )}
           </View>
         </View>
 
-        {/* TEAMS */}
-        <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 flex-1 ml-2 mb-4">
-          <View className="flex-row justify-between items-center mb-3">
-            <Text className="text-white text-[13px] font-bold">Teams</Text>
-            <TouchableOpacity><Text className="text-[#23c55e] text-xs font-bold">See All</Text></TouchableOpacity>
-          </View>
-          <View className="flex-row items-center mb-3">
-            <Image source={{uri: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff'}} className="w-7 h-7 rounded-full bg-[#1a1a1a] mr-2.5" />
-            <View className="flex-1">
-              <Text className="text-white text-xs font-semibold" numberOfLines={1}>Falcons CC</Text>
-              <Text className="text-[#888888] text-[10px] mt-0.5">All-Rounder</Text>
+        {/* Recent Performance */}
+        <View className="flex-row justify-between items-center px-4 mb-3 mt-2">
+          <Text className="text-white text-base font-bold">Recent Performance</Text>
+          <TouchableOpacity><Text className="text-[#23c55e] text-xs font-bold">See All</Text></TouchableOpacity>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, marginBottom: 16 }}>
+          {RECENT_PERFORMANCE.map(perf => (
+            <View key={perf.id} className="w-[150px] bg-[#1a1a1a] rounded-xl border border-[#222222] p-3 mr-3">
+              <View className="flex-row justify-between items-start mb-2">
+                <View className="flex-row items-baseline">
+                  <Text className="text-[#23c55e] text-xl font-bold">{perf.score}</Text>
+                  <Text className="text-[#888888] text-[11px]"> ({perf.balls})</Text>
+                </View>
+                <View className="w-6 h-6 rounded-full bg-[#121212] items-center justify-center"><MaterialCommunityIcons name={perf.icon} size={16} color={theme.subText} /></View>
+              </View>
+              <Text className="text-[#888888] text-[11px] mb-0.5">{perf.overs ? perf.overs : `${perf.fours} Fours • ${perf.sixes} Sixes`}</Text>
+              <Text className="text-white text-[11px] mb-2">vs {perf.vs}</Text>
+              {perf.potm && <View className="bg-[#23c55e]/15 px-1.5 py-0.5 rounded self-start mb-2"><Text className="text-[#23c55e] text-[9px] font-bold">Player of the Match</Text></View>}
+              <View className="flex-row justify-between items-center border-t border-[#222222] pt-2 mt-auto">
+                <Text className="text-[#888888] text-[10px]">{perf.time}</Text>
+                <Feather name="chevron-right" size={16} color={theme.subText} />
+              </View>
             </View>
-            <Text className="text-[#888888] text-[10px]">2025 – Present</Text>
-          </View>
-          <View className="flex-row items-center mb-3">
-            <Image source={{uri: 'https://ui-avatars.com/api/?name=WX&background=8e44ad&color=fff'}} className="w-7 h-7 rounded-full bg-[#1a1a1a] mr-2.5" />
-            <View className="flex-1">
-              <Text className="text-white text-xs font-semibold" numberOfLines={1}>Warriors XI</Text>
-              <Text className="text-[#888888] text-[10px] mt-0.5">All-Rounder</Text>
+          ))}
+        </ScrollView>
+
+        {/* Form & Teams Grid */}
+        <View className="flex-row px-4">
+          {/* FORM */}
+          <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 flex-1 mr-2 mb-4">
+            <Text className="text-white text-[13px] font-bold mb-3">Form <Text style={{fontWeight:'normal', color:theme.subText}}>(Last 5 Matches)</Text></Text>
+            <View className="flex-1 flex-row justify-between items-end pt-4">
+              {FORM_DATA.map((data) => {
+                const isWin = data.result === 'W';
+                const barHeight = Math.max((data.score / 100) * 80, 10);
+                return (
+                  <View key={data.id} className="items-center">
+                    <Text className="text-white text-[9px] mb-1">{data.score}</Text>
+                    <View 
+                      className={`w-3.5 rounded-t-[2px] mb-1 ${isWin ? 'bg-[#23c55e]' : 'bg-[#e74c3c]'}`} 
+                      style={{ height: barHeight }} 
+                    />
+                    <View className={`border px-1 py-0.5 rounded ${isWin ? 'bg-[#23c55e]/15 border-[#23c55e]' : 'bg-[#e74c3c]/15 border-[#e74c3c]'}`}>
+                      <Text className={`text-[8px] font-bold ${isWin ? 'text-[#23c55e]' : 'text-[#e74c3c]'}`}>{data.result}</Text>
+                    </View>
+                  </View>
+                )
+              })}
             </View>
-            <Text className="text-[#888888] text-[10px]">2024 – 2025</Text>
+          </View>
+
+          {/* TEAMS - Real User Teams */}
+          <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 flex-1 ml-2 mb-4">
+            <View className="flex-row justify-between items-center mb-3">
+              <Text className="text-white text-[13px] font-bold">Teams</Text>
+              <TouchableOpacity><Text className="text-[#23c55e] text-xs font-bold">See All</Text></TouchableOpacity>
+            </View>
+
+            {teams && teams.length > 0 ? (
+              teams.map((team, idx) => {
+                const tName = typeof team === 'string' ? team : team.name;
+                const tInitials = tName ? tName.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() : 'TM';
+                return (
+                  <View key={idx} className="flex-row items-center mb-3">
+                    <Image 
+                      source={{ uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(tInitials)}&background=1e3a29&color=fff` }} 
+                      className="w-7 h-7 rounded-full bg-[#1a1a1a] mr-2.5" 
+                    />
+                    <View className="flex-1">
+                      <Text className="text-white text-xs font-semibold" numberOfLines={1}>{tName}</Text>
+                      <Text className="text-[#888888] text-[10px] mt-0.5">{role}</Text>
+                    </View>
+                    <Text className="text-[#888888] text-[10px]">Active</Text>
+                  </View>
+                );
+              })
+            ) : primaryTeam ? (
+              <View className="flex-row items-center mb-3">
+                <Image 
+                  source={{ uri: primaryTeamLogo }} 
+                  className="w-7 h-7 rounded-full bg-[#1a1a1a] mr-2.5" 
+                />
+                <View className="flex-1">
+                  <Text className="text-white text-xs font-semibold" numberOfLines={1}>{primaryTeam}</Text>
+                  <Text className="text-[#888888] text-[10px] mt-0.5">{role}</Text>
+                </View>
+                <Text className="text-[#888888] text-[10px]">Active</Text>
+              </View>
+            ) : (
+              <View className="py-4 items-center">
+                <Text className="text-[#888888] text-xs">No teams joined yet</Text>
+              </View>
+            )}
           </View>
         </View>
+
+        {/* Tournaments & Achievements Grid */}
+        <View className="flex-row px-4">
+          {/* TOURNAMENTS */}
+          <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 flex-1 mr-2 mb-4">
+            <View className="flex-row justify-between items-center mb-3">
+              <Text className="text-white text-[13px] font-bold">Tournaments</Text>
+              <TouchableOpacity><Text className="text-[#23c55e] text-xs font-bold">See All</Text></TouchableOpacity>
+            </View>
+            <View className="flex-row items-center mb-3">
+              <View className="w-7 h-7 rounded-full bg-[#f1c40f]/10 items-center justify-center mr-2.5"><Ionicons name="trophy" size={16} color="#f1c40f" /></View>
+              <View className="flex-1">
+                <Text className="text-white text-xs font-semibold" numberOfLines={1}>Kurukshetra T20</Text>
+                <Text className="text-[#888888] text-[10px] mt-0.5">Semi-Finalist • 2026</Text>
+              </View>
+            </View>
+            <View className="flex-row items-center mb-3">
+              <View className="w-7 h-7 rounded-full bg-[#f1c40f]/10 items-center justify-center mr-2.5"><Ionicons name="trophy" size={16} color="#f1c40f" /></View>
+              <View className="flex-1">
+                <Text className="text-white text-xs font-semibold" numberOfLines={1}>Hyderabad Turf</Text>
+                <Text className="text-[#888888] text-[10px] mt-0.5">Winner • 2025</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* ACHIEVEMENTS */}
+          <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 flex-1 ml-2 mb-4">
+            <View className="flex-row justify-between items-center mb-3">
+              <Text className="text-white text-[13px] font-bold">Achievements</Text>
+              <TouchableOpacity><Text className="text-[#23c55e] text-xs font-bold">See All</Text></TouchableOpacity>
+            </View>
+            <View className="flex-row items-center mb-3">
+              <Ionicons name="star" size={16} color="#f39c12" style={{ marginRight: 8 }} />
+              <Text className="text-white text-xs font-semibold flex-1" numberOfLines={1}>POTM</Text>
+              <Text className="text-[#888888] text-[10px]">8 Times</Text>
+            </View>
+            <View className="flex-row items-center mb-3">
+              <MaterialCommunityIcons name="target" size={16} color="#e67e22" style={{ marginRight: 8 }} />
+              <Text className="text-white text-xs font-semibold flex-1" numberOfLines={1}>500 Runs</Text>
+              <Text className="text-[#888888] text-[10px]">Milestone</Text>
+            </View>
+            <View className="flex-row items-center mb-3">
+              <MaterialCommunityIcons name="cricket" size={16} color="#e67e22" style={{ marginRight: 8 }} />
+              <Text className="text-white text-xs font-semibold flex-1" numberOfLines={1}>50 Wickets</Text>
+              <Text className="text-[#888888] text-[10px]">Milestone</Text>
+            </View>
+          </View>
+        </View>
+
       </View>
-
-      {/* Tournaments & Achievements Grid */}
-      <View className="flex-row px-4">
-        {/* TOURNAMENTS */}
-        <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 flex-1 mr-2 mb-4">
-          <View className="flex-row justify-between items-center mb-3">
-            <Text className="text-white text-[13px] font-bold">Tournaments</Text>
-            <TouchableOpacity><Text className="text-[#23c55e] text-xs font-bold">See All</Text></TouchableOpacity>
-          </View>
-          <View className="flex-row items-center mb-3">
-            <View className="w-7 h-7 rounded-full bg-[#f1c40f]/10 items-center justify-center mr-2.5"><Ionicons name="trophy" size={16} color="#f1c40f" /></View>
-            <View className="flex-1">
-              <Text className="text-white text-xs font-semibold" numberOfLines={1}>Kurukshetra T20</Text>
-              <Text className="text-[#888888] text-[10px] mt-0.5">Semi-Finalist • 2026</Text>
-            </View>
-          </View>
-          <View className="flex-row items-center mb-3">
-            <View className="w-7 h-7 rounded-full bg-[#f1c40f]/10 items-center justify-center mr-2.5"><Ionicons name="trophy" size={16} color="#f1c40f" /></View>
-            <View className="flex-1">
-              <Text className="text-white text-xs font-semibold" numberOfLines={1}>Hyderabad Turf</Text>
-              <Text className="text-[#888888] text-[10px] mt-0.5">Winner • 2025</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* ACHIEVEMENTS */}
-        <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 flex-1 ml-2 mb-4">
-          <View className="flex-row justify-between items-center mb-3">
-            <Text className="text-white text-[13px] font-bold">Achievements</Text>
-            <TouchableOpacity><Text className="text-[#23c55e] text-xs font-bold">See All</Text></TouchableOpacity>
-          </View>
-          <View className="flex-row items-center mb-3">
-            <Ionicons name="star" size={16} color="#f39c12" style={{ marginRight: 8 }} />
-            <Text className="text-white text-xs font-semibold flex-1" numberOfLines={1}>POTM</Text>
-            <Text className="text-[#888888] text-[10px]">8 Times</Text>
-          </View>
-          <View className="flex-row items-center mb-3">
-            <MaterialCommunityIcons name="target" size={16} color="#e67e22" style={{ marginRight: 8 }} />
-            <Text className="text-white text-xs font-semibold flex-1" numberOfLines={1}>500 Runs</Text>
-            <Text className="text-[#888888] text-[10px]">Milestone</Text>
-          </View>
-          <View className="flex-row items-center mb-3">
-            <MaterialCommunityIcons name="cricket" size={16} color="#e67e22" style={{ marginRight: 8 }} />
-            <Text className="text-white text-xs font-semibold flex-1" numberOfLines={1}>50 Wickets</Text>
-            <Text className="text-[#888888] text-[10px]">Milestone</Text>
-          </View>
-        </View>
-      </View>
-
-    </View>
-  );
+    );
+  };
 
   // ==========================================
   // TAB 2: STATS
   // ==========================================
   const renderStats = () => (
     <View className="pt-4">
-      
       {/* Batting Stats */}
       <View className="flex-row justify-between items-center px-4 mb-3 mt-2">
         <View className="flex-row items-center">
@@ -424,42 +671,6 @@ export default function ProfileScreen() {
           <View className="items-center w-[22%] mb-3"><Text className="text-[#888888] text-[10px] mb-1">Direct Hits</Text><Text className="text-white text-base font-bold">2</Text></View>
         </View>
       </View>
-
-      {/* Performance Trend Placeholder */}
-      <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 mx-4 mb-4 mt-4">
-        <View className="flex-row justify-between items-center mb-4">
-          <View className="flex-row items-center">
-            <Feather name="trending-up" size={16} color={theme.subText} style={{ marginRight: 8 }} />
-            <View>
-              <Text className="text-white text-[13px] font-bold">Performance Trend</Text>
-              <Text className="text-[#888888] text-[11px] mt-0.5">Last 10 Innings</Text>
-            </View>
-          </View>
-          <View className="flex-row items-center bg-[#121212] border border-[#222222] px-2.5 py-1 rounded-md">
-            <Text className="text-white text-[11px] mr-1.5">Runs</Text>
-            <Feather name="chevron-down" size={14} color={theme.subText} />
-          </View>
-        </View>
-        <View className="h-[100px] bg-[#1a1a1a] rounded-lg overflow-hidden border border-[#222222]">
-           <Image source={{uri: 'https://www.transparenttextures.com/patterns/stardust.png'}} className="absolute w-full h-full opacity-10" />
-           {/* Visual Mock of the Graph */}
-           <View className="flex-1 flex-row items-end justify-between px-2.5 pb-5">
-             {[18, 74, 31, 86, 42, 0, 55, 24, 67, 33].map((val, i) => {
-               const height = (val / 100) * 80;
-               return (
-                 <View key={i} className="items-center">
-                   <Text className="text-white text-[10px] mb-1">{val}{val===86?'*':''}</Text>
-                   <View className="w-1.5 h-1.5 rounded-full bg-[#23c55e]" style={{ marginBottom: height }} />
-                   <View className={`border px-1 py-0.5 rounded w-4 h-4 rounded-sm p-0 justify-center items-center ${val > 20 ? 'bg-[#23c55e]/15 border-[#23c55e]' : 'bg-[#e74c3c]/15 border-[#e74c3c]'}`}>
-                     <Text className={`text-[8px] font-bold ${val > 20 ? 'text-[#23c55e]' : 'text-[#e74c3c]'}`}>{val > 20 ? 'W' : 'L'}</Text>
-                   </View>
-                 </View>
-               )
-             })}
-           </View>
-        </View>
-      </View>
-
     </View>
   );
 
@@ -468,7 +679,6 @@ export default function ProfileScreen() {
   // ==========================================
   const renderMatches = () => (
     <View className="pt-4">
-      
       {/* Match Summary */}
       <View className="flex-row justify-between items-center px-4 mb-3 mt-2">
         <Text className="text-white text-base font-bold">Match Summary</Text>
@@ -552,16 +762,14 @@ export default function ProfileScreen() {
           <Feather name="chevron-right" size={16} color={theme.subText} />
         </TouchableOpacity>
       </View>
-
     </View>
   );
 
   // ==========================================
-  // TAB 4: POSTS
+  // TAB 4: POSTS - Real Author Identity
   // ==========================================
   const renderPosts = () => (
     <View className="pt-4">
-      
       {/* Post Filters */}
       <View className="flex-row justify-between px-4 mb-4">
         <TouchableOpacity className="flex-1 flex-row items-center justify-center py-2 border-b-2 border-[#23c55e]">
@@ -582,17 +790,17 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Feed */}
+      {/* Feed - Displaying real user as post author */}
       {POSTS_FEED.map((post) => (
         <View key={post.id} className="bg-[#0a0a0a] border-b border-[#222222] py-4 px-4">
           <View className="flex-row items-center mb-3">
-            <Image source={{ uri: PROFILE.avatar }} className="w-9 h-9 rounded-full mr-2.5" />
+            <Image source={{ uri: avatar }} className="w-9 h-9 rounded-full mr-2.5 bg-[#121212]" />
             <View className="flex-1">
               <View className="flex-row items-center">
-                <Text className="text-white text-sm font-bold">{PROFILE.name}</Text>
+                <Text className="text-white text-sm font-bold">{name}</Text>
                 <MaterialCommunityIcons name="check-decagram" size={14} color={theme.primary} style={{ marginLeft: 4 }} />
               </View>
-              <Text className="text-[#888888] text-[11px] mt-0.5">{PROFILE.username} • {post.time}</Text>
+              <Text className="text-[#888888] text-[11px] mt-0.5">{username} • {post.time}</Text>
             </View>
             <TouchableOpacity><Feather name="more-horizontal" size={20} color={theme.subText} /></TouchableOpacity>
           </View>
@@ -602,7 +810,7 @@ export default function ProfileScreen() {
           {/* Single Image */}
           {post.image && <Image source={{ uri: post.image }} className="w-full h-[200px] rounded-xl bg-[#1a1a1a] mb-3" />}
 
-          {/* Performance Embed (Mocked based on image 4) */}
+          {/* Performance Embed */}
           {post.isPerformance && (
             <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 mb-3">
               <View className="flex-row items-center mb-3">
@@ -663,10 +871,8 @@ export default function ProfileScreen() {
         <Text className="text-white text-sm font-bold mb-1">No more posts yet</Text>
         <Text className="text-[#888888] text-xs">New posts will appear here.</Text>
       </View>
-
     </View>
   );
-
 
   // ==========================================
   // 3-DOT OPTIONS MENU MODAL
@@ -696,11 +902,23 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Menu Options */}
+          {/* Edit Profile Option (Own profile only) */}
+          {isOwnProfile && (
+            <TouchableOpacity
+              onPress={handleOpenEditModal}
+              className="p-3.5 bg-[#181818] rounded-xl mb-2.5 flex-row items-center active:bg-[#202020]"
+            >
+              <View className="w-8 h-8 rounded-lg bg-[#222222] items-center justify-center mr-3">
+                <Feather name="edit-3" size={16} color="#ffffff" />
+              </View>
+              <Text className="text-white text-sm font-semibold flex-1">Edit Profile</Text>
+              <Feather name="chevron-right" size={16} color="#666666" />
+            </TouchableOpacity>
+          )}
+
+          {/* Share Profile */}
           <TouchableOpacity
-            onPress={() => {
-              setShowMenuModal(false);
-            }}
+            onPress={() => setShowMenuModal(false)}
             className="p-3.5 bg-[#181818] rounded-xl mb-2.5 flex-row items-center active:bg-[#202020]"
           >
             <View className="w-8 h-8 rounded-lg bg-[#222222] items-center justify-center mr-3">
@@ -710,48 +928,172 @@ export default function ProfileScreen() {
             <Feather name="chevron-right" size={16} color="#666666" />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => {
-              setShowMenuModal(false);
-            }}
-            className="p-3.5 bg-[#181818] rounded-xl mb-2.5 flex-row items-center active:bg-[#202020]"
-          >
-            <View className="w-8 h-8 rounded-lg bg-[#222222] items-center justify-center mr-3">
-              <Feather name="edit-3" size={16} color="#ffffff" />
-            </View>
-            <Text className="text-white text-sm font-semibold flex-1">Edit Profile</Text>
-            <Feather name="chevron-right" size={16} color="#666666" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => {
-              setShowMenuModal(false);
-            }}
-            className="p-3.5 bg-[#181818] rounded-xl mb-2.5 flex-row items-center active:bg-[#202020]"
-          >
-            <View className="w-8 h-8 rounded-lg bg-[#222222] items-center justify-center mr-3">
-              <Feather name="settings" size={16} color="#ffffff" />
-            </View>
-            <Text className="text-white text-sm font-semibold flex-1">Settings</Text>
-            <Feather name="chevron-right" size={16} color="#666666" />
-          </TouchableOpacity>
-
-          {/* Logout Item - Visually Distinguishable as Destructive */}
-          <TouchableOpacity
-            onPress={() => {
-              setShowMenuModal(false);
-              setShowLogoutConfirmModal(true);
-            }}
-            className="p-3.5 bg-[#2a1315] border border-[#ef4444]/30 rounded-xl mt-1 flex-row items-center active:bg-[#38181c]"
-          >
-            <View className="w-8 h-8 rounded-lg bg-[#3f1618] items-center justify-center mr-3">
-              <Feather name="log-out" size={16} color="#ef4444" />
-            </View>
-            <Text className="text-[#ef4444] text-sm font-bold flex-1">Logout</Text>
-            <Feather name="chevron-right" size={16} color="#ef4444" />
-          </TouchableOpacity>
+          {/* Logout Item (Own profile only) */}
+          {isOwnProfile && (
+            <TouchableOpacity
+              onPress={() => {
+                setShowMenuModal(false);
+                setShowLogoutConfirmModal(true);
+              }}
+              className="p-3.5 bg-[#2a1315] border border-[#ef4444]/30 rounded-xl mt-1 flex-row items-center active:bg-[#38181c]"
+            >
+              <View className="w-8 h-8 rounded-lg bg-[#3f1618] items-center justify-center mr-3">
+                <Feather name="log-out" size={16} color="#ef4444" />
+              </View>
+              <Text className="text-[#ef4444] text-sm font-bold flex-1">Logout</Text>
+              <Feather name="chevron-right" size={16} color="#ef4444" />
+            </TouchableOpacity>
+          )}
         </TouchableOpacity>
       </TouchableOpacity>
+    </Modal>
+  );
+
+  // ==========================================
+  // EDIT PROFILE MODAL (Per Section 16 & 6)
+  // ==========================================
+  const renderEditProfileModal = () => (
+    <Modal
+      visible={showEditModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowEditModal(false)}
+    >
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        className="flex-1 bg-black/80 justify-end"
+      >
+        <View className="bg-[#121212] border-t border-[#222222] rounded-t-3xl p-5 max-h-[88%]">
+          {/* Header */}
+          <View className="flex-row justify-between items-center pb-3 border-b border-[#222222] mb-4">
+            <Text className="text-white text-base font-bold">Edit Profile</Text>
+            <TouchableOpacity onPress={() => setShowEditModal(false)} className="p-1">
+              <Feather name="x" size={20} color="#888888" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} className="mb-4">
+            {/* Full Name */}
+            <Text className="text-xs font-semibold mb-1 text-[#888888]">Full Name</Text>
+            <TextInput
+              value={editName}
+              onChangeText={setEditName}
+              className="bg-[#1a1a1a] border border-[#222222] text-white rounded-xl px-4 py-2.5 mb-3 text-sm"
+              placeholder="e.g. Arjun Reddy"
+              placeholderTextColor="#666666"
+            />
+
+            {/* Username */}
+            <Text className="text-xs font-semibold mb-1 text-[#888888]">Username</Text>
+            <TextInput
+              value={editUsername}
+              onChangeText={setEditUsername}
+              className="bg-[#1a1a1a] border border-[#222222] text-white rounded-xl px-4 py-2.5 mb-3 text-sm"
+              placeholder="e.g. arjunreddy"
+              placeholderTextColor="#666666"
+              autoCapitalize="none"
+            />
+
+            {/* Location */}
+            <Text className="text-xs font-semibold mb-1 text-[#888888]">Location</Text>
+            <TextInput
+              value={editLocation}
+              onChangeText={setEditLocation}
+              className="bg-[#1a1a1a] border border-[#222222] text-white rounded-xl px-4 py-2.5 mb-3 text-sm"
+              placeholder="e.g. Hyderabad, India"
+              placeholderTextColor="#666666"
+            />
+
+            {/* Playing Role */}
+            <Text className="text-xs font-semibold mb-1.5 text-[#888888]">Role</Text>
+            <View className="flex-row flex-wrap gap-2 mb-3">
+              {['Batsman', 'Bowler', 'All-Rounder', 'Wicketkeeper'].map((r) => (
+                <TouchableOpacity
+                  key={r}
+                  onPress={() => setEditRole(r)}
+                  className={`px-3 py-1.5 rounded-lg border ${editRole === r ? 'bg-[#23c55e]/20 border-[#23c55e]' : 'bg-[#1a1a1a] border-[#222222]'}`}
+                >
+                  <Text className={`text-xs ${editRole === r ? 'text-[#23c55e] font-bold' : 'text-[#888888]'}`}>{r}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Batting Style */}
+            <Text className="text-xs font-semibold mb-1.5 text-[#888888]">Batting Style</Text>
+            <View className="flex-row flex-wrap gap-2 mb-3">
+              {['Right-Handed', 'Left-Handed', 'Switch Hitter'].map((b) => (
+                <TouchableOpacity
+                  key={b}
+                  onPress={() => setEditBatting(b)}
+                  className={`px-3 py-1.5 rounded-lg border ${editBatting === b ? 'bg-[#23c55e]/20 border-[#23c55e]' : 'bg-[#1a1a1a] border-[#222222]'}`}
+                >
+                  <Text className={`text-xs ${editBatting === b ? 'text-[#23c55e] font-bold' : 'text-[#888888]'}`}>{b}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Bowling Style */}
+            <Text className="text-xs font-semibold mb-1.5 text-[#888888]">Bowling Style</Text>
+            <View className="flex-row flex-wrap gap-2 mb-3">
+              {['None', 'Right-Arm Medium', 'Right-Arm Fast', 'Left-Arm Fast', 'Right-Arm Spin', 'Left-Arm Spin'].map((bw) => (
+                <TouchableOpacity
+                  key={bw}
+                  onPress={() => setEditBowling(bw)}
+                  className={`px-3 py-1.5 rounded-lg border ${editBowling === bw ? 'bg-[#23c55e]/20 border-[#23c55e]' : 'bg-[#1a1a1a] border-[#222222]'}`}
+                >
+                  <Text className={`text-xs ${editBowling === bw ? 'text-[#23c55e] font-bold' : 'text-[#888888]'}`}>{bw}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Experience */}
+            <Text className="text-xs font-semibold mb-1.5 text-[#888888]">Experience</Text>
+            <View className="flex-row flex-wrap gap-2 mb-3">
+              {['College', 'Club', 'Turf', 'College • Club • Turf', 'Beginner', 'Advanced'].map((e) => (
+                <TouchableOpacity
+                  key={e}
+                  onPress={() => setEditExperience(e)}
+                  className={`px-3 py-1.5 rounded-lg border ${editExperience === e ? 'bg-[#23c55e]/20 border-[#23c55e]' : 'bg-[#1a1a1a] border-[#222222]'}`}
+                >
+                  <Text className={`text-xs ${editExperience === e ? 'text-[#23c55e] font-bold' : 'text-[#888888]'}`}>{e}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Primary Team */}
+            <Text className="text-xs font-semibold mb-1 text-[#888888]">Primary Team</Text>
+            <TextInput
+              value={editTeam}
+              onChangeText={setEditTeam}
+              className="bg-[#1a1a1a] border border-[#222222] text-white rounded-xl px-4 py-2.5 mb-4 text-sm"
+              placeholder="e.g. Warriors XI or Falcons CC"
+              placeholderTextColor="#666666"
+            />
+          </ScrollView>
+
+          {/* Action Buttons */}
+          <View className="flex-row gap-3">
+            <TouchableOpacity
+              onPress={() => setShowEditModal(false)}
+              className="flex-1 py-3 rounded-xl bg-[#1a1a1a] border border-[#333333] items-center justify-center"
+            >
+              <Text className="text-[#888888] text-sm font-bold">Cancel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              disabled={isSaving}
+              onPress={handleSaveProfile}
+              className="flex-1 py-3 rounded-xl bg-[#23c55e] items-center justify-center"
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color="#000000" />
+              ) : (
+                <Text className="text-black text-sm font-bold">Save Changes</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 
@@ -823,6 +1165,7 @@ export default function ProfileScreen() {
         {activeTab === 'Posts' && renderPosts()}
       </ScrollView>
       {renderMenuModal()}
+      {renderEditProfileModal()}
       {renderLogoutConfirmModal()}
     </SafeAreaView>
   );

@@ -41,6 +41,26 @@ export const useAuthStore = create(
         sportProfiles: [...state.sportProfiles, newProfile]
       })),
 
+      // Update account details (e.g. name, username, location, avatar)
+      updateAccountData: (updatedFields) => set((state) => ({
+        accountData: state.accountData ? { ...state.accountData, ...updatedFields } : updatedFields
+      })),
+
+      // Update current active sport profile (e.g. role, battingStyle, bowlingStyle, teams)
+      updateActiveSportProfile: (updatedProfileFields) => set((state) => {
+        const sport = state.activeSport || 'Cricket';
+        const profiles = state.sportProfiles || [];
+        const index = profiles.findIndex((p) => p.sport === sport);
+        if (index >= 0) {
+          const updated = [...profiles];
+          updated[index] = { ...updated[index], ...updatedProfileFields };
+          return { sportProfiles: updated };
+        }
+        return {
+          sportProfiles: [...profiles, { sport, ...updatedProfileFields }]
+        };
+      }),
+
       // Complete system wipe for log out
       logout: () => set({ 
         isAuthenticated: false, 

@@ -10,7 +10,7 @@ import ProgressIndicator from '../../components/ProgressIndicator';
 import SportCard from '../../components/SportCard';
 import PrimaryButton from '../../components/PrimaryButton';
 
-export default function ChooseSportScreen() {
+export default function ChooseSportScreen({ route }) {
   const { theme } = useTheme();
   const navigation = useNavigation();
   // Cricket is selected by default based on your UI prompt
@@ -84,7 +84,13 @@ export default function ChooseSportScreen() {
       <View className="px-6 pb-8 pt-4" style={{ backgroundColor: theme.background }}>
         <PrimaryButton 
           title="Continue" 
-          onPress={() => navigation.navigate('CricketProfile')} 
+          onPress={() => navigation.navigate('CricketProfile', {
+            fullName: route?.params?.fullName,
+            username: route?.params?.username,
+            email: route?.params?.email,
+            password: route?.params?.password,
+            sport: selectedSport || 'Cricket',
+          })} 
           disabled={!selectedSport}
         />
         <View className="mt-8">

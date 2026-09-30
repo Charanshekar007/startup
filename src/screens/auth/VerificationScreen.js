@@ -71,7 +71,12 @@ export default function VerificationScreen({ route }) {
     }
 
     setErrorMessage('');
-    navigation.navigate('ChooseSport');
+    navigation.navigate('ChooseSport', {
+      fullName: route?.params?.fullName,
+      username: route?.params?.username,
+      email: userEmail,
+      password: route?.params?.password,
+    });
   };
 
   return (

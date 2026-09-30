@@ -56,9 +56,14 @@ export default function SignUpScreen() {
       return;
     }
 
-    // 4. Clear errors and proceed, passing the email to the Verification screen!
+    // 4. Clear errors and proceed, passing all collected credentials to the Verification screen!
     setErrorMessage('');
-    navigation.navigate('Verification', { email: email }); // <--- Added!
+    navigation.navigate('Verification', {
+      fullName: fullName.trim(),
+      username: username.trim().replace(/^@/, ''),
+      email: email.trim().toLowerCase(),
+      password: password,
+    });
   };
 
   return (
