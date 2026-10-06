@@ -41,27 +41,57 @@ export default function MatchesScreen() {
 
   const contextCompleted = (matches || [])
     .filter((m) => m.status === 'Completed')
-    .map((m) => ({
-      id: m.id,
-      league: `${m.format || 'T20'} • COMPLETED`,
-      date: m.date || 'Today',
-      teamA: m.teamA,
-      teamB: m.teamB,
-      logoA: m.teamAObj?.logo || 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff',
-      logoB: m.teamBObj?.logo || 'https://ui-avatars.com/api/?name=WX&background=b9770e&color=fff',
-      scoreA: m.scoreA || '165/7',
-      oversA: m.oversA || '20.0 Ov',
-      scoreB: m.scoreB || '166/4',
-      oversB: m.oversB || '18.2 Ov',
-      winner: m.winner
-        ? (m.margin === 'Super Over' ? `${m.winner} won via Super Over` : `${m.winner} won`)
-        : (m.result === 'DRAW' || m.margin === 'Draw' ? 'Match Drawn' : 'Match Completed'),
-      margin: (m.margin === 'Super Over' || m.margin === 'Draw') ? '' : (m.margin || ''),
-      venue: m.venue || 'Rajiv Cricket Ground, Hyderabad',
-      matchData: m,
-    }));
+    .map((m) => {
+      const isSO = Boolean(
+        m.margin === 'Super Over' ||
+        m.isSuperOver ||
+        (Array.isArray(m.superOvers) && m.superOvers.length > 0) ||
+        (m.resultText && m.resultText.toLowerCase().includes('super over')) ||
+        (m.winner && m.winner.toLowerCase().includes('super over'))
+      );
 
-  
+      let superOverScores = null;
+      if (m.superOverScores) {
+        superOverScores = m.superOverScores;
+      } else if (Array.isArray(m.superOvers) && m.superOvers.length > 0) {
+        const lastSO = m.superOvers[m.superOvers.length - 1];
+        if (lastSO?.innings1 && lastSO?.innings2) {
+          superOverScores = {
+            team1: lastSO.innings1.battingTeam,
+            score1: `${lastSO.innings1.totalRuns ?? 0}/${lastSO.innings1.totalWickets ?? 0}`,
+            team2: lastSO.innings2.battingTeam,
+            score2: `${lastSO.innings2.totalRuns ?? 0}/${lastSO.innings2.totalWickets ?? 0}`,
+          };
+        }
+      }
+
+      const teamAInitials = (m.teamA || 'TA').split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+      const teamBInitials = (m.teamB || 'TB').split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+
+      return {
+        id: m.id,
+        league: `${m.format || 'T20'} • COMPLETED`,
+        date: m.date || 'Today',
+        teamA: m.teamA,
+        teamB: m.teamB,
+        logoA: m.teamAObj?.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(teamAInitials)}&background=1e3a29&color=fff`,
+        logoB: m.teamBObj?.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(teamBInitials)}&background=b9770e&color=fff`,
+        scoreA: m.scoreA || '0/0',
+        oversA: m.oversA || '0.0 Ov',
+        scoreB: m.scoreB || '0/0',
+        oversB: m.oversB || '0.0 Ov',
+        winner: m.winner || null,
+        margin: m.margin || '',
+        result: m.result || (isSO ? 'TIED' : (m.winner ? 'WIN' : 'TIED')),
+        resultText: m.resultText || '',
+        isSuperOver: isSO,
+        superOvers: m.superOvers || [],
+        superOverScores,
+        venue: m.venue || 'Rajiv Cricket Ground, Hyderabad',
+        matchData: m,
+      };
+    });
+
   const liveMatches = [
     { id: 'l1', league: 'KURUKSHETRA LEAGUE • T20', teamA: 'Falcons CC', teamB: 'Warriors XI', logoA: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff', logoB: 'https://ui-avatars.com/api/?name=WX&background=333&color=fff', scoreA: '186/7', oversA: '32.3 Ov', scoreB: '152/4', oversB: '30.1 Ov', status: 'Falcons CC elected to bat', venue: 'Rajiv Cricket Ground, Hyderabad' },
     { id: 'l2', league: 'CITY PREMIER LEAGUE • T20', teamA: 'Tigers XI', teamB: 'Kings CC', logoA: 'https://ui-avatars.com/api/?name=TX&background=e67e22&color=fff', logoB: 'https://ui-avatars.com/api/?name=KC&background=c0392b&color=fff', scoreA: '98/2', oversA: '11.4 Ov', scoreB: '-/-', oversB: 'Yet to bat', status: 'Tigers XI elected to bat', venue: 'Greenfield Stadium, Bengaluru' },
@@ -80,8 +110,98 @@ export default function MatchesScreen() {
   ];
 
   const completedMatches = [
-    { id: 'c1', league: 'KURUKSHETRA LEAGUE • T20', date: 'Yesterday', teamA: 'Falcons CC', teamB: 'Warriors XI', logoA: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff', logoB: 'https://ui-avatars.com/api/?name=WX&background=333&color=fff', scoreA: '186/7', oversA: '20.0 Ov', scoreB: '152/9', oversB: '20.0 Ov', winner: 'Falcons CC won', margin: 'by 34 runs', venue: 'Rajiv Cricket Ground, Hyderabad' },
-    { id: 'c2', league: 'CITY PREMIER LEAGUE • T20', date: 'May 23, 2025', teamA: 'Tigers XI', teamB: 'Kings CC', logoA: 'https://ui-avatars.com/api/?name=TX&background=e67e22&color=fff', logoB: 'https://ui-avatars.com/api/?name=KC&background=c0392b&color=fff', scoreA: '198/6', oversA: '20.0 Ov', scoreB: '195/8', oversB: '20.0 Ov', winner: 'Tigers XI won', margin: 'by 6 wickets', venue: 'Greenfield Stadium, Bengaluru' },
+    {
+      id: 'c1',
+      league: 'KURUKSHETRA LEAGUE • T20',
+      date: 'Yesterday',
+      teamA: 'Falcons CC',
+      teamB: 'Warriors XI',
+      logoA: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff',
+      logoB: 'https://ui-avatars.com/api/?name=WX&background=333&color=fff',
+      scoreA: '186/7',
+      oversA: '20.0 Ov',
+      scoreB: '152/9',
+      oversB: '20.0 Ov',
+      winner: 'Falcons CC won',
+      margin: 'by 34 runs',
+      venue: 'Rajiv Cricket Ground, Hyderabad',
+    },
+    {
+      id: 'c2',
+      league: 'PRACTICE MATCH • T20',
+      date: 'Today',
+      teamA: 'Bhaiengers',
+      teamB: 'Falcons CC',
+      logoA: 'https://ui-avatars.com/api/?name=BH&background=1e3a29&color=fff',
+      logoB: 'https://ui-avatars.com/api/?name=FC&background=333&color=fff',
+      scoreA: '11/0',
+      oversA: '1.0 Ov',
+      scoreB: '9/0',
+      oversB: '1.0 Ov',
+      winner: 'Bhaiengers won',
+      margin: 'by 2 runs',
+      venue: 'Rajiv Cricket Ground, Hyderabad',
+    },
+    {
+      id: 'c3',
+      league: 'CUSTOM • COMPLETED',
+      date: '18 May 2026',
+      teamA: 'Warriors XI',
+      teamB: 'Falcons CC',
+      logoA: 'https://ui-avatars.com/api/?name=WX&background=b9770e&color=fff',
+      logoB: 'https://ui-avatars.com/api/?name=FC&background=1e3a29&color=fff',
+      scoreA: '36/0',
+      oversA: '1.0 Ov',
+      scoreB: '36/0',
+      oversB: '1.0 Ov',
+      isSuperOver: true,
+      result: 'TIED',
+      winner: 'Warriors XI',
+      margin: 'Super Over',
+      resultText: 'Warriors XI won via Super Over',
+      superOverScores: {
+        team1: 'Warriors XI',
+        score1: '7/0',
+        team2: 'Falcons CC',
+        score2: '6/0',
+      },
+      venue: 'Rajiv Cricket Ground, Hyderabad',
+    },
+    {
+      id: 'c4',
+      league: 'CITY PREMIER LEAGUE • T20',
+      date: '19 May 2026',
+      teamA: 'Bhaiengers',
+      teamB: 'Warriors XI',
+      logoA: 'https://ui-avatars.com/api/?name=BH&background=1e3a29&color=fff',
+      logoB: 'https://ui-avatars.com/api/?name=WX&background=b9770e&color=fff',
+      scoreA: '67/0',
+      oversA: '1.0 Ov',
+      scoreB: '67/0',
+      oversB: '1.0 Ov',
+      isSuperOver: true,
+      result: 'TIED',
+      winner: 'Warriors XI',
+      margin: 'Super Over',
+      resultText: 'Warriors XI won via Super Over',
+      venue: 'Rajiv Cricket Ground, Hyderabad',
+    },
+    {
+      id: 'c5',
+      league: 'CITY PREMIER LEAGUE • T20',
+      date: 'May 23, 2025',
+      teamA: 'Tigers XI',
+      teamB: 'Kings CC',
+      logoA: 'https://ui-avatars.com/api/?name=TX&background=e67e22&color=fff',
+      logoB: 'https://ui-avatars.com/api/?name=KC&background=c0392b&color=fff',
+      scoreA: '198/6',
+      oversA: '20.0 Ov',
+      scoreB: '195/8',
+      oversB: '20.0 Ov',
+      winner: 'Tigers XI won',
+      margin: 'by 6 wickets',
+      venue: 'Greenfield Stadium, Bengaluru',
+    },
   ];
 
   const playingMatches = [
@@ -297,55 +417,230 @@ export default function MatchesScreen() {
     );
   };
 
-  const CompletedCard = ({ match }) => (
-    <View className="bg-[#121212] border border-[#222222] rounded-xl mb-4">
-      <View className="flex-row justify-between items-center px-4 pt-4 pb-1">
-        <Text className="text-[#888888] text-[10px] tracking-[0.5px] uppercase flex-1">{match.league}</Text>
-        <Text className="text-[#888888] text-[11px]">{match.date}</Text>
-      </View>
-      <View className="flex-row justify-between items-center px-4 py-4">
-        <View className="items-center w-20">
-          <Image source={{ uri: match.logoA }} className="w-11 h-11 rounded-full mb-2 bg-[#222222]" />
-          <Text className="text-white text-xs font-semibold text-center">{match.teamA}</Text>
+  const CompletedCard = ({ match }) => {
+    const isSuperOver = Boolean(
+      match.isSuperOver ||
+      match.margin === 'Super Over' ||
+      (typeof match.margin === 'string' && match.margin.toLowerCase().includes('super over')) ||
+      match.superOver?.played ||
+      (Array.isArray(match.superOvers) && match.superOvers.length > 0) ||
+      (typeof match.winner === 'string' && match.winner.toLowerCase().includes('super over')) ||
+      (typeof match.resultText === 'string' && match.resultText.toLowerCase().includes('super over')) ||
+      (match.matchData && (
+        match.matchData.margin === 'Super Over' ||
+        (Array.isArray(match.matchData.superOvers) && match.matchData.superOvers.length > 0) ||
+        match.matchData.isSuperOver
+      ))
+    );
+
+    const isDrawn = !isSuperOver && (
+      match.result === 'DRAW' ||
+      match.margin === 'Draw' ||
+      (typeof match.winner === 'string' && match.winner.toLowerCase().includes('drawn'))
+    );
+
+    // Clean winner name without extra trailing descriptions like "won via Super Over" or "won by..."
+    let cleanWinner = match.winner || match.matchData?.winner || '';
+    if (cleanWinner) {
+      cleanWinner = cleanWinner
+        .replace(/\s+won\s+via\s+super\s+over.*$/i, '')
+        .replace(/\s+won\s+by.*$/i, '')
+        .replace(/\s+won$/i, '')
+        .trim();
+    }
+
+    // Super Over scores (if available from mock data or matchData.superOvers)
+    let superOverScores = null;
+    if (match.superOverScores) {
+      superOverScores = match.superOverScores;
+    } else {
+      const soList = match.superOvers || match.matchData?.superOvers;
+      if (Array.isArray(soList) && soList.length > 0) {
+        const lastSO = soList[soList.length - 1];
+        if (lastSO?.innings1 && lastSO?.innings2) {
+          superOverScores = {
+            team1: lastSO.innings1.battingTeam,
+            score1: `${lastSO.innings1.totalRuns ?? 0}/${lastSO.innings1.totalWickets ?? 0}`,
+            team2: lastSO.innings2.battingTeam,
+            score2: `${lastSO.innings2.totalRuns ?? 0}/${lastSO.innings2.totalWickets ?? 0}`,
+          };
+        }
+      }
+    }
+
+    // Determine normal match margin
+    let displayMargin = match.margin;
+    if (displayMargin === 'Super Over' || displayMargin === 'Draw') {
+      displayMargin = '';
+    }
+    if (!displayMargin && !isSuperOver && !isDrawn && match.resultText) {
+      const marginMatch = match.resultText.match(/by\s+([^.]+)/i);
+      if (marginMatch) {
+        displayMargin = `by ${marginMatch[1].trim()}`;
+      }
+    }
+
+    return (
+      <View className="bg-[#121212] border border-[#222222] rounded-xl mb-4 overflow-hidden">
+        {/* Card Header: League & Date */}
+        <View className="flex-row justify-between items-center px-4 pt-4 pb-1">
+          <Text className="text-[#888888] text-[10px] tracking-[0.5px] uppercase flex-1" numberOfLines={1}>
+            {match.league}
+          </Text>
+          <Text className="text-[#888888] text-[11px] ml-2">
+            {match.date}
+          </Text>
         </View>
-        <View className="flex-1 items-center justify-center">
-          <View className="flex-row items-center justify-center w-full">
-            <View className="items-center w-[70px]">
-              <Text className="text-white text-[22px] font-bold">{match.scoreA}</Text>
-              <Text className="text-[11px] mt-1 text-[#888888]">{match.oversA}</Text>
-            </View>
-            <View className="items-center px-2">
-              <Text className="text-[#23c55e] text-[11px] font-semibold">{match.winner}</Text>
-              <Text className="text-[#888888] text-[10px] mt-1">{match.margin}</Text>
-            </View>
-            <View className="items-center w-[70px]">
-              <Text className="text-white text-[22px] font-bold">{match.scoreB}</Text>
-              <Text className="text-[11px] mt-1 text-[#888888]">{match.oversB}</Text>
+
+        {/* 3-Column Match Teams & Result Row */}
+        <View className="flex-row items-center justify-between px-3 py-4">
+          
+          {/* LEFT TEAM COLUMN: Avatar -> Team Name -> Score -> Overs */}
+          <View className="flex-1 items-center px-1">
+            <Image
+              source={{ uri: match.logoA }}
+              className="w-12 h-12 rounded-full mb-1.5 bg-[#222222]"
+            />
+            <Text
+              className="text-white text-xs font-semibold text-center mb-1 w-full"
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {match.teamA}
+            </Text>
+            <Text className="text-white text-lg font-bold text-center">
+              {match.scoreA}
+            </Text>
+            <Text className="text-[#888888] text-[11px] text-center mt-0.5">
+              {match.oversA}
+            </Text>
+          </View>
+
+          {/* CENTER RESULT COLUMN: Independent column for Winner / Super Over / Tied */}
+          <View className="w-[124px] px-1 items-center justify-center">
+            {isSuperOver ? (
+              <View className="items-center justify-center w-full">
+                <View className="bg-[#eab308]/15 border border-[#eab308]/40 px-2 py-0.5 rounded-full mb-1.5">
+                  <Text className="text-[#eab308] text-[9.5px] font-bold tracking-wider text-center">
+                    MATCH TIED
+                  </Text>
+                </View>
+                <Text className="text-[#888888] text-[10px] font-semibold uppercase tracking-wider text-center mb-0.5">
+                  Super Over
+                </Text>
+                <Text
+                  className="text-[#23c55e] text-xs font-bold text-center leading-4"
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
+                  {cleanWinner ? `${cleanWinner} won` : 'Match Won'}
+                </Text>
+              </View>
+            ) : isDrawn ? (
+              <View className="items-center justify-center w-full">
+                <View className="bg-[#888888]/15 border border-[#888888]/40 px-2 py-0.5 rounded-full mb-1">
+                  <Text className="text-[#888888] text-[9.5px] font-bold tracking-wider text-center">
+                    MATCH DRAWN
+                  </Text>
+                </View>
+                <Text className="text-[#888888] text-[10px] text-center mt-0.5">
+                  Scores Level
+                </Text>
+              </View>
+            ) : (
+              <View className="items-center justify-center w-full">
+                <Text
+                  className="text-[#23c55e] text-xs font-bold text-center leading-4"
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
+                  {cleanWinner ? `${cleanWinner} won` : (match.winner || 'Match Completed')}
+                </Text>
+                {Boolean(displayMargin) ? (
+                  <Text
+                    className="text-[#888888] text-[11px] font-medium text-center mt-1"
+                    numberOfLines={1}
+                  >
+                    {displayMargin}
+                  </Text>
+                ) : null}
+              </View>
+            )}
+          </View>
+
+          {/* RIGHT TEAM COLUMN: Avatar -> Team Name -> Score -> Overs */}
+          <View className="flex-1 items-center px-1">
+            <Image
+              source={{ uri: match.logoB }}
+              className="w-12 h-12 rounded-full mb-1.5 bg-[#222222]"
+            />
+            <Text
+              className="text-white text-xs font-semibold text-center mb-1 w-full"
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {match.teamB}
+            </Text>
+            <Text className="text-white text-lg font-bold text-center">
+              {match.scoreB}
+            </Text>
+            <Text className="text-[#888888] text-[11px] text-center mt-0.5">
+              {match.oversB}
+            </Text>
+          </View>
+
+        </View>
+
+        {/* Super Over Scores Row (only when superOverScores are available) */}
+        {Boolean(isSuperOver && superOverScores) ? (
+          <View className="mx-3 mb-3 px-3 py-2 bg-[#181818] rounded-lg border border-[#262626]">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center">
+                <View className="w-1.5 h-1.5 rounded-full bg-[#eab308] mr-1.5" />
+                <Text className="text-[#888888] text-[10px] font-bold uppercase tracking-wider">
+                  Super Over
+                </Text>
+              </View>
+              <View className="flex-row items-center flex-1 justify-end ml-2">
+                <Text className="text-white text-[11px] font-semibold" numberOfLines={1}>
+                  {superOverScores.team1 || match.teamA}
+                  <Text className="text-[#23c55e] font-bold">
+                    {` ${superOverScores.score1}`}
+                  </Text>
+                </Text>
+                <Text className="text-[#555555] text-[10px] mx-1.5">•</Text>
+                <Text className="text-white text-[11px] font-semibold" numberOfLines={1}>
+                  {superOverScores.team2 || match.teamB}
+                  <Text className="text-[#23c55e] font-bold">
+                    {` ${superOverScores.score2}`}
+                  </Text>
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
-        <View className="items-center w-20">
-          <Image source={{ uri: match.logoB }} className="w-11 h-11 rounded-full mb-2 bg-[#222222]" />
-          <Text className="text-white text-xs font-semibold text-center">{match.teamB}</Text>
+        ) : null}
+
+        {/* Footer: Venue and Scorecard button */}
+        <View className="flex-row justify-between items-center p-3 border-t border-[#222222]">
+          <View className="flex-row items-center flex-1 pr-2">
+            <Feather name="map-pin" size={12} color="#23c55e" />
+            <Text className="text-[#888888] text-[11px] ml-[6px]" numberOfLines={1}>
+              {match.venue}
+            </Text>
+          </View>
+          <View className="flex-row items-center">
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('LiveScoring', { matchData: match.matchData || match })}
+              className="border border-[#1a4024] px-3 py-1 rounded-xl mr-2"
+            >
+              <Text className="text-[#23c55e] text-[11px] font-semibold">Scorecard</Text>
+            </TouchableOpacity>
+            <Feather name="chevron-right" size={16} color="#888888" />
+          </View>
         </View>
       </View>
-      <View className="flex-row justify-between items-center p-3 border-t border-[#222222]">
-        <View className="flex-row items-center flex-1">
-          <Feather name="map-pin" size={12} color="#23c55e" />
-          <Text className="text-[#888888] text-[11px] ml-[6px]">{match.venue}</Text>
-        </View>
-        <View className="flex-row items-center">
-          <TouchableOpacity 
-            onPress={() => match.matchData && navigation.navigate('LiveScoring', { matchData: match.matchData })}
-            className="border border-[#1a4024] px-3 py-1 rounded-xl mr-2"
-          >
-            <Text className="text-[#23c55e] text-[11px] font-semibold">Scorecard</Text>
-          </TouchableOpacity>
-          <Feather name="chevron-right" size={16} color="#888888" />
-        </View>
-      </View>
-    </View>
-  );
+    );
+  };
 
   const MyMatchesSidebarCard = ({ match }) => {
     const isLive = match.type === 'LIVE NOW';

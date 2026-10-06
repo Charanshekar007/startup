@@ -7,73 +7,56 @@
  * 
  * Rules:
  * - Strictly idempotent: pure function over the matches array.
- * - Player identification by unique player ID (currentUserId).
- * - Cricket overs calculated using legal deliveries (never decimal math).
- * - Safe numeric handling (no NaN, no Infinity, safe division by zero).
- * - No fake/fallback data when no matches exist.
+ * - Player identification strictly by unique player ID (currentUserId / playerId).
+ * - No fake or hardcoded demo values.
+ * - Cricket overs calculated using integer legal deliveries (no decimal math errors).
+ * - Safe numeric handling (no NaN, safe division by zero).
+ * - Empty database produces empty states (all zeros).
  */
 
 /**
- * Helper to check if a player matches the target ID.
- * Supports primary ID check, userId check, and known aliases for seeded demo accounts.
+ * Helper to check if a player/candidate matches the target unique player ID.
+ * Strict comparison on ID (no name guessing, no legacy aliases).
  */
-export function isPlayerMatch(candidate, playerId, playerName = '') {
+export function isPlayerMatch(candidate, playerId) {
   if (!candidate || !playerId) return false;
 
-  const cId = typeof candidate === 'object' ? (candidate.id || candidate.userId || candidate.playerId) : candidate;
-  if (cId && String(cId) === String(playerId)) return true;
+  const cId = typeof candidate === 'object'
+    ? (candidate.id || candidate.userId || candidate.playerId)
+    : candidate;
 
-  // Specific alias mapping for seeded default users if ID wasn't linked in legacy mock squads
-  if (String(playerId) === 'usr_arjun123') {
-    if (cId === 'a2') return true;
-    const cName = typeof candidate === 'object' ? candidate.name : candidate;
-    if (cName && (cName === 'Arjun Reddy' || cName === 'Arjun')) return true;
-  }
-
-  if (String(playerId) === 'usr_rahul123') {
-    if (cId === 'a8' || cId === 'b2') return true;
-    const cName = typeof candidate === 'object' ? candidate.name : candidate;
-    if (cName && (cName === 'Rahul Verma' || cName === 'Rahul' || cName === 'KL Rahul (WK)')) return true;
-  }
-
-  // Fallback match on player's full display name if candidate has name
-  if (playerName && typeof candidate === 'object' && candidate.name) {
-    const pNorm = playerName.trim().toLowerCase();
-    const cNorm = candidate.name.trim().toLowerCase();
-    if (pNorm && cNorm && (cNorm === pNorm || cNorm.startsWith(pNorm + ' '))) {
-      return true;
-    }
-  }
-
-  return false;
+  return Boolean(cId && String(cId) === String(playerId));
 }
 
 /**
  * Check if the player participated in a completed match.
+ * Scoped strictly to the target playerId.
  */
-export function didPlayerParticipate(match, playerId, playerName = '') {
-  if (!match || match.status !== 'Completed') return false;
+export function didPlayerParticipate(match, playerId) {
+  if (!match || match.status !== 'Completed' || !playerId) return false;
 
-  // 1. Check Playing XI
+  // 1. Check Playing XI of Team A
   const xiA = match.playingXI_A || [];
-  const xiB = match.playingXI_B || [];
-  if (xiA.some(p => isPlayerMatch(p, playerId, playerName))) return true;
-  if (xiB.some(p => isPlayerMatch(p, playerId, playerName))) return true;
+  if (xiA.some(p => isPlayerMatch(p, playerId))) return true;
 
-  // 2. Check Innings 1 Batters & Bowlers
+  // 2. Check Playing XI of Team B
+  const xiB = match.playingXI_B || [];
+  if (xiB.some(p => isPlayerMatch(p, playerId))) return true;
+
+  // 3. Fallback check: Innings 1 Batters or Bowlers
   const inn1 = match.firstInnings;
   if (inn1) {
-    if ((inn1.batters || []).some(b => isPlayerMatch(b, playerId, playerName))) return true;
+    if ((inn1.batters || []).some(b => isPlayerMatch(b, playerId))) return true;
     const bowlers1 = inn1.bowlers || {};
-    if (Object.keys(bowlers1).some(bId => isPlayerMatch({ id: bId, name: bowlers1[bId]?.name }, playerId, playerName))) return true;
+    if (Object.keys(bowlers1).some(bId => isPlayerMatch(bowlers1[bId]?.id || bId, playerId))) return true;
   }
 
-  // 3. Check Innings 2 Batters & Bowlers
+  // 4. Fallback check: Innings 2 Batters or Bowlers
   const inn2 = match.secondInnings;
   if (inn2) {
-    if ((inn2.batters || []).some(b => isPlayerMatch(b, playerId, playerName))) return true;
+    if ((inn2.batters || []).some(b => isPlayerMatch(b, playerId))) return true;
     const bowlers2 = inn2.bowlers || {};
-    if (Object.keys(bowlers2).some(bId => isPlayerMatch({ id: bId, name: bowlers2[bId]?.name }, playerId, playerName))) return true;
+    if (Object.keys(bowlers2).some(bId => isPlayerMatch(bowlers2[bId]?.id || bId, playerId))) return true;
   }
 
   return false;
@@ -82,25 +65,25 @@ export function didPlayerParticipate(match, playerId, playerName = '') {
 /**
  * Determine which team the player was playing for in a match.
  */
-export function getPlayerTeam(match, playerId, playerName = '') {
+export function getPlayerTeam(match, playerId) {
   const xiA = match.playingXI_A || [];
-  if (xiA.some(p => isPlayerMatch(p, playerId, playerName))) {
+  if (xiA.some(p => isPlayerMatch(p, playerId))) {
     return { playerTeam: match.teamA, opponentTeam: match.teamB, isTeamA: true };
   }
   const xiB = match.playingXI_B || [];
-  if (xiB.some(p => isPlayerMatch(p, playerId, playerName))) {
+  if (xiB.some(p => isPlayerMatch(p, playerId))) {
     return { playerTeam: match.teamB, opponentTeam: match.teamA, isTeamA: false };
   }
 
-  // Check which innings the player batted in
-  if (match.firstInnings?.batters?.some(b => isPlayerMatch(b, playerId, playerName))) {
+  // Check innings batting team
+  if (match.firstInnings?.batters?.some(b => isPlayerMatch(b, playerId))) {
     return {
       playerTeam: match.firstInnings.battingTeam || match.teamA,
       opponentTeam: match.firstInnings.bowlingTeam || match.teamB,
       isTeamA: true,
     };
   }
-  if (match.secondInnings?.batters?.some(b => isPlayerMatch(b, playerId, playerName))) {
+  if (match.secondInnings?.batters?.some(b => isPlayerMatch(b, playerId))) {
     return {
       playerTeam: match.secondInnings.battingTeam || match.teamB,
       opponentTeam: match.secondInnings.bowlingTeam || match.teamA,
@@ -135,12 +118,34 @@ export function formatMatchTime(dateVal) {
 }
 
 /**
- * Main calculation engine: derives all profile data from completed matches.
+ * Helper to safely extract integer legal balls from a bowler statistics record.
+ * Handles integer overs + balls, decimal-formatted string (e.g. '3.4' -> 3 overs 4 balls = 22 balls),
+ * and legalBalls property.
+ */
+function getSpellLegalBalls(bStats) {
+  if (!bStats) return 0;
+  if (bStats.legalBalls !== undefined && bStats.legalBalls !== null) {
+    return Number(bStats.legalBalls) || 0;
+  }
+  if (typeof bStats.overs === 'string' && bStats.overs.includes('.')) {
+    const parts = bStats.overs.split('.');
+    const compO = parseInt(parts[0], 10) || 0;
+    const remB = parseInt(parts[1], 10) || 0;
+    return compO * 6 + remB;
+  }
+  const compO = Number(bStats.overs) || 0;
+  const remB = Number(bStats.balls) || 0;
+  return compO * 6 + remB;
+}
+
+/**
+ * Main calculation engine: derives all profile data exclusively from
+ * completed matches in which the target player participated.
  */
 export function calculatePlayerStats(matches = [], playerId, options = {}) {
-  const { formatFilter = 'All', playerName = '' } = options;
+  const { formatFilter = 'All' } = options;
 
-  // Initialize empty state structures
+  // Initialize empty state structures (no mock / fake values)
   const emptyState = {
     batting: {
       matches: 0,
@@ -194,8 +199,8 @@ export function calculatePlayerStats(matches = [], playerId, options = {}) {
     return emptyState;
   }
 
-  // 1. Filter completed matches involving this player
-  let eligibleMatches = matches.filter(m => m && m.status === 'Completed' && didPlayerParticipate(m, playerId, playerName));
+  // 1. Filter completed matches involving ONLY this player
+  let eligibleMatches = matches.filter(m => m && m.status === 'Completed' && didPlayerParticipate(m, playerId));
 
   // 2. Sort by date/timestamp descending (latest match first)
   eligibleMatches.sort((a, b) => {
@@ -252,13 +257,18 @@ export function calculatePlayerStats(matches = [], playerId, options = {}) {
   const tournamentMap = {};
   const teamMap = {};
 
-  // Iterate over each match once (prevents double counting)
+  // Track processed match IDs to strictly prevent double counting (Requirement 29)
+  const processedMatchIds = new Set();
+
   filteredMatches.forEach((match) => {
-    const { playerTeam, opponentTeam } = getPlayerTeam(match, playerId, playerName);
+    if (!match.id || processedMatchIds.has(match.id)) return;
+    processedMatchIds.add(match.id);
+
+    const { playerTeam, opponentTeam } = getPlayerTeam(match, playerId);
     if (playerTeam) teamMap[playerTeam] = (teamMap[playerTeam] || 0) + 1;
 
     // Track tournaments
-    const leagueName = match.tournament || match.league || (match.type && match.type !== 'Friendly' ? `${match.type} League` : null);
+    const leagueName = match.tournament || match.league || (match.type && match.type !== 'Friendly' && match.type !== 'Practice' ? `${match.type} League` : null);
     if (leagueName) {
       if (!tournamentMap[leagueName]) {
         tournamentMap[leagueName] = {
@@ -282,11 +292,11 @@ export function calculatePlayerStats(matches = [], playerId, options = {}) {
     else if (isTie) matchesTied += 1;
     else matchesLost += 1;
 
-    // Player of the match check
+    // Player of the match check strictly scoped to playerId
     const isPOTM = Boolean(
-      (match.potmId && isPlayerMatch({ id: match.potmId }, playerId, playerName)) ||
-      (match.potm && isPlayerMatch(match.potm, playerId, playerName)) ||
-      (match.playerOfTheMatch && isPlayerMatch(match.playerOfTheMatch, playerId, playerName))
+      (match.potmId && isPlayerMatch({ id: match.potmId }, playerId)) ||
+      (match.potm && isPlayerMatch(match.potm, playerId)) ||
+      (match.playerOfTheMatch && isPlayerMatch(match.playerOfTheMatch, playerId))
     );
     if (isPOTM) potmCount += 1;
 
@@ -303,13 +313,18 @@ export function calculatePlayerStats(matches = [], playerId, options = {}) {
     let matchDidBowl = false;
     let matchBowlingMaidens = 0;
 
+    let matchCatches = 0;
+    let matchRunOuts = 0;
+    let matchStumpings = 0;
+    let matchDirectHits = 0;
+
     // Check innings 1 and 2
     const allInnings = [match.firstInnings, match.secondInnings].filter(Boolean);
 
     allInnings.forEach((inn) => {
       // 1. Batting in this innings
       const batters = inn.batters || [];
-      const batterEntry = batters.find(b => isPlayerMatch(b, playerId, playerName));
+      const batterEntry = batters.find(b => isPlayerMatch(b, playerId));
       if (batterEntry && batterEntry.status !== 'yet to bat') {
         matchDidBat = true;
         totalBattingInnings += 1;
@@ -350,14 +365,12 @@ export function calculatePlayerStats(matches = [], playerId, options = {}) {
 
       // 2. Bowling in this innings
       const bowlers = inn.bowlers || {};
-      const bowlerKey = Object.keys(bowlers).find(bId => isPlayerMatch({ id: bId, name: bowlers[bId]?.name }, playerId, playerName));
+      const bowlerKey = Object.keys(bowlers).find(bId => isPlayerMatch(bowlers[bId]?.id || bId, playerId));
       if (bowlerKey) {
         const bStats = bowlers[bowlerKey];
-        const overs = Number(bStats.overs) || 0;
-        const balls = Number(bStats.balls) || 0;
-        const spellLegal = overs * 6 + balls;
+        const spellLegal = getSpellLegalBalls(bStats);
 
-        if (spellLegal > 0 || Number(bStats.wickets) > 0) {
+        if (spellLegal > 0 || Number(bStats.wickets) > 0 || Number(bStats.runsConceded) > 0) {
           matchDidBowl = true;
           matchBowlingLegalBalls += spellLegal;
           const w = Number(bStats.wickets) || 0;
@@ -384,25 +397,53 @@ export function calculatePlayerStats(matches = [], playerId, options = {}) {
       }
 
       // 3. Dot balls from pastOvers if recorded
-      if (inn.pastOvers && Array.isArray(inn.pastOvers)) {
+      if (inn.pastOvers && Array.isArray(inn.pastOvers) && bowlerKey) {
         inn.pastOvers.forEach(o => {
-          if (bowlerKey && (o.bowlerId === bowlerKey || isPlayerMatch({ id: o.bowlerId, name: o.bowlerName }, playerId, playerName))) {
+          if (o.bowlerId && isPlayerMatch({ id: o.bowlerId }, playerId)) {
             const dots = (o.balls || []).filter(val => val === '0' || val === 0).length;
             totalDotBalls += dots;
           }
         });
       }
 
-      // 4. Fielding events from fallOfWickets
+      // 4. Fielding events strictly credited to playerId
       const fows = inn.fallOfWickets || [];
       fows.forEach(f => {
-        const isFielder = isPlayerMatch({ id: f.fielderId, name: f.fielder }, playerId, playerName);
-        if (isFielder) {
+        if (isPlayerMatch(f.fielderId, playerId)) {
           const dt = (f.dismissalType || '').toLowerCase();
-          if (dt.includes('caught') || dt.includes('catch')) totalCatches += 1;
-          else if (dt.includes('stumped')) totalStumpings += 1;
-          else if (dt.includes('direct')) totalDirectHits += 1;
-          else if (dt.includes('run out')) totalRunOuts += 1;
+          if (dt.includes('caught') || dt.includes('catch')) {
+            totalCatches += 1;
+            matchCatches += 1;
+          } else if (dt.includes('stumped')) {
+            totalStumpings += 1;
+            matchStumpings += 1;
+          } else if (dt.includes('direct')) {
+            totalDirectHits += 1;
+            matchDirectHits += 1;
+          } else if (dt.includes('run out')) {
+            totalRunOuts += 1;
+            matchRunOuts += 1;
+          }
+        }
+      });
+
+      // Also check inn.batters for catches/stumpings if not recorded in fallOfWickets
+      (inn.batters || []).forEach(b => {
+        if (b.fielderId && isPlayerMatch(b.fielderId, playerId)) {
+          const alreadyInFow = fows.some(f => (f.batterId && f.batterId === b.id) || f.batter === b.name);
+          if (!alreadyInFow) {
+            const dt = (b.dismissalType || b.dismissal || '').toLowerCase();
+            if (dt.includes('caught') || dt.includes('catch') || dt.startsWith('c ')) {
+              totalCatches += 1;
+              matchCatches += 1;
+            } else if (dt.includes('stumped') || dt.startsWith('st ')) {
+              totalStumpings += 1;
+              matchStumpings += 1;
+            } else if (dt.includes('run out')) {
+              totalRunOuts += 1;
+              matchRunOuts += 1;
+            }
+          }
         }
       });
     });
@@ -420,7 +461,14 @@ export function calculatePlayerStats(matches = [], playerId, options = {}) {
     if (matchDidBat) {
       cardScore = `${matchRuns}${matchIsNotOut ? '*' : ''}`;
       cardBalls = `${matchBalls}`;
-      cardExtra = `${matchFours} Fours • ${matchSixes} Sixes`;
+      if (matchDidBowl) {
+        const fullO = Math.floor(matchBowlingLegalBalls / 6);
+        const remB = matchBowlingLegalBalls % 6;
+        const ovStr = remB > 0 ? `${fullO}.${remB}` : `${fullO}`;
+        cardExtra = `${matchFours} Fours • ${matchBowlingWickets}/${matchBowlingRuns} (${ovStr} Ov)`;
+      } else {
+        cardExtra = `${matchFours} Fours • ${matchSixes} Sixes`;
+      }
       cardIcon = 'cricket-bat';
     } else if (matchDidBowl) {
       const fullO = Math.floor(matchBowlingLegalBalls / 6);
@@ -429,11 +477,20 @@ export function calculatePlayerStats(matches = [], playerId, options = {}) {
       cardBalls = remB > 0 ? `${fullO}.${remB}` : `${fullO}`;
       cardExtra = `${cardBalls} Overs • ${matchBowlingMaidens} Maidens`;
       cardIcon = 'cricket';
+    } else if (matchCatches > 0 || matchRunOuts > 0 || matchStumpings > 0) {
+      const fieldParts = [];
+      if (matchCatches > 0) fieldParts.push(`${matchCatches} Catch${matchCatches === 1 ? '' : 'es'}`);
+      if (matchRunOuts > 0) fieldParts.push(`${matchRunOuts} Run-out${matchRunOuts === 1 ? '' : 's'}`);
+      if (matchStumpings > 0) fieldParts.push(`${matchStumpings} Stumping${matchStumpings === 1 ? '' : 's'}`);
+      cardScore = fieldParts[0] || 'Fielded';
+      cardBalls = '0';
+      cardExtra = fieldParts.slice(1).join(' • ') || 'Fielding';
+      cardIcon = 'hand-back-right';
     } else {
       cardScore = 'DNB';
       cardBalls = '0';
-      cardExtra = 'Fielded';
-      cardIcon = 'hand-back-right';
+      cardExtra = 'Playing XI';
+      cardIcon = 'account-check';
     }
 
     recentPerformanceList.push({
@@ -442,7 +499,7 @@ export function calculatePlayerStats(matches = [], playerId, options = {}) {
       balls: cardBalls,
       fours: matchFours,
       sixes: matchSixes,
-      overs: matchDidBowl && !matchDidBat ? `${Math.floor(matchBowlingLegalBalls / 6)}.${matchBowlingLegalBalls % 6} Overs` : null,
+      overs: matchDidBowl ? `${Math.floor(matchBowlingLegalBalls / 6)}.${matchBowlingLegalBalls % 6} Overs` : null,
       vs: opponentTeam,
       potm: isPOTM,
       time: formattedDate,
@@ -456,7 +513,7 @@ export function calculatePlayerStats(matches = [], playerId, options = {}) {
       result: isWin ? 'W' : (isTie ? 'T' : 'L'),
     });
 
-    // Match history entry for Matches tab
+    // Match history entry for Matches tab (only participated matches)
     matchHistoryList.push({
       id: String(match.id),
       format: match.format || 'T20',
@@ -507,7 +564,7 @@ export function calculatePlayerStats(matches = [], playerId, options = {}) {
     : '-';
 
   // Calculate Match Summary
-  const totalMatchesCount = filteredMatches.length;
+  const totalMatchesCount = processedMatchIds.size;
   const winPercent = totalMatchesCount > 0
     ? `${((matchesWon / totalMatchesCount) * 100).toFixed(1)}%`
     : '0.0%';

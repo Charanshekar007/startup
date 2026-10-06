@@ -474,7 +474,24 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       extrasTotal,
       extrasBreakdown: { ...extrasBreakdown },
       batters: customBatters || [...battersScorecard],
-      bowlers: customBowlers || JSON.parse(JSON.stringify(bowlerStatsMap)),
+      bowlers: (() => {
+        const bMap = customBowlers ? { ...customBowlers } : JSON.parse(JSON.stringify(bowlerStatsMap));
+        if (bowler && bowler.id) {
+          const parts = String(bowler.overs || `${currentOverNumber}.${legalBalls}`).split('.');
+          const compOvers = parseInt(parts[0], 10) || 0;
+          const remBalls = parseInt(parts[1], 10) || 0;
+          bMap[bowler.id] = {
+            id: bowler.id,
+            name: bowler.name,
+            overs: compOvers,
+            balls: remBalls,
+            maidens: bowler.maidens || 0,
+            runsConceded: bowler.runsConceded || 0,
+            wickets: bowler.wickets || 0,
+          };
+        }
+        return bMap;
+      })(),
       fallOfWickets: [...fallOfWickets],
       pastOvers: customPastOvers || JSON.parse(JSON.stringify(pastOvers)),
       target: (finalRuns !== undefined ? finalRuns : totalRuns) + 1,
@@ -730,17 +747,36 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     const inn1 = firstInningsSummary || {
       battingTeam: firstInningsBattingTeam,
       bowlingTeam: firstInningsBowlingTeam,
-      totalRuns: 186,
-      totalWickets: 7,
-      overs: '20.0',
-      extrasTotal: 12,
-      extrasBreakdown: { wides: 4, noBalls: 1, byes: 4, legByes: 3, penalty: 0 },
+      totalRuns: 0,
+      totalWickets: 0,
+      overs: '0.0',
+      extrasTotal: 0,
+      extrasBreakdown: { wides: 0, noBalls: 0, byes: 0, legByes: 0, penalty: 0 },
       batters: [],
       bowlers: {},
       fallOfWickets: [],
-      target: 187,
+      target: 1,
       wicketkeeper,
     };
+
+    const inn2Bowlers = (() => {
+      const bMap = customBowlers ? { ...customBowlers } : JSON.parse(JSON.stringify(bowlerStatsMap));
+      if (bowler && bowler.id) {
+        const parts = String(bowler.overs || `${currentOverNumber}.${legalBalls}`).split('.');
+        const compOvers = parseInt(parts[0], 10) || 0;
+        const remBalls = parseInt(parts[1], 10) || 0;
+        bMap[bowler.id] = {
+          id: bowler.id,
+          name: bowler.name,
+          overs: compOvers,
+          balls: remBalls,
+          maidens: bowler.maidens || 0,
+          runsConceded: bowler.runsConceded || 0,
+          wickets: bowler.wickets || 0,
+        };
+      }
+      return bMap;
+    })();
 
     const inn2 = secondInningsSummary || {
       battingTeam: firstInningsBowlingTeam,
@@ -751,7 +787,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       extrasTotal,
       extrasBreakdown: { ...extrasBreakdown },
       batters: customBatters || [...battersScorecard],
-      bowlers: customBowlers || JSON.parse(JSON.stringify(bowlerStatsMap)),
+      bowlers: inn2Bowlers,
       fallOfWickets: [...fallOfWickets],
       pastOvers: customPastOvers || JSON.parse(JSON.stringify(pastOvers)),
       wicketkeeper,
@@ -811,6 +847,8 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         margin: finalResult.margin,
         result: finalResult.result,
         resultText: finalResult.resultText,
+        scoreA: matchParam.scoreA || `${inn1.totalRuns}/${inn1.totalWickets}`,
+        oversA: matchParam.oversA || `${inn1.overs} Ov`,
         scoreB: `${inn2.totalRuns}/${inn2.totalWickets}`,
         oversB: `${inn2.overs} Ov`,
         firstInnings: inn1,
@@ -819,6 +857,8 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         potm: finalResult.potm,
         potmId: finalResult.potmId,
         completedAt: finalResult.completedAt,
+        playingXI_A: matchParam?.playingXI_A || playingXI_A,
+        playingXI_B: matchParam?.playingXI_B || playingXI_B,
       });
     }
 
@@ -947,7 +987,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     const newBowlerStatsMap = {
       ...bowlerStatsMap,
       [finishedBowler.id]: {
+        id: finishedBowler.id,
+        name: finishedBowler.name,
         overs: currentCompletedOvers,
+        balls: 0,
         maidens: isMaiden ? (bowlerStatsMap[finishedBowler.id]?.maidens || 0) + 1 : bowlerStatsMap[finishedBowler.id]?.maidens || 0,
         runsConceded: finishedBowler.runsConceded,
         wickets: finishedBowler.wickets,

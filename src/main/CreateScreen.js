@@ -13,13 +13,20 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useMatches } from '../context/MatchContext';
-import { useAuthStore } from '../store/authStore';
-import {
-  TEAM_A_DEFAULT,
-  TEAM_B_DEFAULT,
-  SQUAD_A,
-  SQUAD_B,
-} from '../data/cricketSquads';
+import { playerService } from '../services/playerService';
+import { teamService } from '../services/teamService';
+import { CURRENT_MOCK_USER } from '../data/mockPlayers';
+import { INITIAL_MOCK_TEAMS } from '../data/mockTeams';
+
+const getActiveMembers = (team) => {
+  if (!team || !Array.isArray(team.members)) return [];
+  return team.members.filter((m) => m.status === 'accepted');
+};
+
+const getPendingMembers = (team) => {
+  if (!team || !Array.isArray(team.members)) return [];
+  return team.members.filter((m) => m.status === 'pending');
+};
 
 const { width } = Dimensions.get('window');
 
@@ -38,9 +45,45 @@ export default function CreateScreen({ navigation }) {
   // State Machine: 0 = Hub, 1 = Details, 2 = Setup (Review), 3 = Toss, 4 = Playing XI, 5 = Opening Players, 6 = Match Ready, 7 = Live Preview
   const [activeStep, setActiveStep] = useState(0);
 
-  // Teams State
-  const [teamA, setTeamA] = useState(TEAM_A_DEFAULT);
-  const [teamB, setTeamB] = useState(TEAM_B_DEFAULT);
+  // Available Teams from frontend teamService
+  const [availableTeams, setAvailableTeams] = useState(INITIAL_MOCK_TEAMS);
+
+  // Teams State (Default to mock teams)
+  const [teamA, setTeamA] = useState(INITIAL_MOCK_TEAMS[0]);
+  const [teamB, setTeamB] = useState(INITIAL_MOCK_TEAMS[1]);
+
+  // Current authenticated mock user (Requirement 24)
+  const [currentUser, setCurrentUser] = useState(CURRENT_MOCK_USER);
+
+  // Match Draft State (Requirement 16 & 18)
+  const [matchDraft, setMatchDraft] = useState({
+    teamAId: INITIAL_MOCK_TEAMS[0].id,
+    teamBId: INITIAL_MOCK_TEAMS[1].id,
+    teamAPlayingXI: (INITIAL_MOCK_TEAMS[0].members || []).slice(0, 11).map((p) => p.id),
+    teamBPlayingXI: (INITIAL_MOCK_TEAMS[1].members || []).slice(0, 11).map((p) => p.id),
+  });
+
+  // Team Selection / Creation Modal State
+  const [teamPickerSlot, setTeamPickerSlot] = useState(null); // 'A' | 'B' | null
+  const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
+  const [newTeamName, setNewTeamName] = useState('');
+  const [newTeamShortName, setNewTeamShortName] = useState('');
+  const [newTeamLocation, setNewTeamLocation] = useState('');
+  const [newTeamType, setNewTeamType] = useState('Club');
+  const [newTeamLogo, setNewTeamLogo] = useState('');
+  const [isCreatingTeam, setIsCreatingTeam] = useState(false);
+
+  // Squad / Member Management Modal State (Requirements 3, 4, 5, 8, 9)
+  const [managingSquadTeam, setManagingSquadTeam] = useState(null);
+  const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
+  const [searchPlayerUid, setSearchPlayerUid] = useState('');
+  const [isSearchingPlayer, setIsSearchingPlayer] = useState(false);
+  const [searchedPlayer, setSearchedPlayer] = useState(null);
+  const [searchPlayerError, setSearchPlayerError] = useState('');
+  const [isInvitingPlayer, setIsInvitingPlayer] = useState(false);
+
+  // Team Picker Search State (Requirement 11 & 12)
+  const [teamSearchQuery, setTeamSearchQuery] = useState('');
 
   // Match Configuration State
   const [matchFormat, setMatchFormat] = useState('T20'); // 'T10' | 'T20' | 'ODI' | 'Custom'
@@ -55,16 +98,20 @@ export default function CreateScreen({ navigation }) {
   const [matchRules, setMatchRules] = useState('Standard Cricket Rules');
 
   // Edit Detail Modals
-  const [editingField, setEditingField] = useState(null); // 'venue' | 'date' | 'time' | 'rules' | 'teamA' | 'teamB'
+  const [editingField, setEditingField] = useState(null); // 'venue' | 'date' | 'time' | 'rules'
   const [editValue, setEditValue] = useState('');
 
   // Toss State
   const [tossWinner, setTossWinner] = useState('A'); // 'A' | 'B'
   const [tossDecision, setTossDecision] = useState('Bat'); // 'Bat' | 'Bowl'
 
-  // Playing XI Selection State (Ids of selected players)
-  const [selectedXI_A, setSelectedXI_A] = useState(SQUAD_A.slice(0, 11).map((p) => p.id));
-  const [selectedXI_B, setSelectedXI_B] = useState(SQUAD_B.slice(0, 11).map((p) => p.id));
+  // Playing XI Selection State (Ids of selected players - Exactly 11 players per team)
+  const [selectedXI_A, setSelectedXI_A] = useState(
+    (INITIAL_MOCK_TEAMS[0].members || []).slice(0, 11).map((p) => p.id)
+  );
+  const [selectedXI_B, setSelectedXI_B] = useState(
+    (INITIAL_MOCK_TEAMS[1].members || []).slice(0, 11).map((p) => p.id)
+  );
 
   // Opening Players State
   const [strikerId, setStrikerId] = useState(null);
@@ -77,7 +124,46 @@ export default function CreateScreen({ navigation }) {
 
   // Global Match Store
   const { addMatch, setActiveMatch } = useMatches();
-  const accountData = useAuthStore((state) => state.accountData);
+
+  // Load mock user and teams from services on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function loadInitialData() {
+      try {
+        const user = await playerService.getCurrentUser();
+        if (isMounted && user) {
+          setCurrentUser(user);
+        }
+
+        const teams = await teamService.getTeams();
+        if (isMounted && Array.isArray(teams) && teams.length >= 2) {
+          setAvailableTeams(teams);
+          const initialTeamA = teams[0];
+          const initialTeamB = teams[1];
+          setTeamA(initialTeamA);
+          setTeamB(initialTeamB);
+
+          const xiA = (initialTeamA.members || []).slice(0, 11).map((p) => p.id);
+          const xiB = (initialTeamB.members || []).slice(0, 11).map((p) => p.id);
+          setSelectedXI_A(xiA);
+          setSelectedXI_B(xiB);
+
+          setMatchDraft({
+            teamAId: initialTeamA.id,
+            teamBId: initialTeamB.id,
+            teamAPlayingXI: xiA,
+            teamBPlayingXI: xiB,
+          });
+        }
+      } catch (err) {
+        console.warn('Error loading mock data from services:', err);
+      }
+    }
+    loadInitialData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Update overs whenever format changes
   const handleSelectFormat = (fmt) => {
@@ -109,8 +195,8 @@ export default function CreateScreen({ navigation }) {
   const firstInningsBattingTeam = tossDecision === 'Bat' ? winnerTeam : loserTeam;
   const firstInningsBowlingTeam = tossDecision === 'Bat' ? loserTeam : winnerTeam;
 
-  const battingSquad = firstInningsBattingTeam.id === teamA.id ? SQUAD_A : SQUAD_B;
-  const bowlingSquad = firstInningsBowlingTeam.id === teamA.id ? SQUAD_A : SQUAD_B;
+  const battingSquad = firstInningsBattingTeam.id === teamA.id ? getActiveMembers(teamA) : getActiveMembers(teamB);
+  const bowlingSquad = firstInningsBowlingTeam.id === teamA.id ? getActiveMembers(teamA) : getActiveMembers(teamB);
   const battingXI_Ids = firstInningsBattingTeam.id === teamA.id ? selectedXI_A : selectedXI_B;
   const bowlingXI_Ids = firstInningsBowlingTeam.id === teamA.id ? selectedXI_A : selectedXI_B;
 
@@ -130,12 +216,15 @@ export default function CreateScreen({ navigation }) {
       }
       if (bowlingXIPlayers.length >= 1) {
         // Find best bowler
-        const defaultBowler = bowlingXIPlayers.find((p) => p.role.includes('Bowler')) || bowlingXIPlayers[bowlingXIPlayers.length - 1];
+        const defaultBowler =
+          bowlingXIPlayers.find((p) => (p.role || '').includes('Bowler')) ||
+          bowlingXIPlayers[bowlingXIPlayers.length - 1];
         if (!openingBowlerId || !bowlingXI_Ids.includes(openingBowlerId)) {
           setOpeningBowlerId(defaultBowler.id);
         }
         // Find best keeper
-        const defaultKeeper = bowlingXIPlayers.find((p) => p.role.includes('WK')) || bowlingXIPlayers[0];
+        const defaultKeeper =
+          bowlingXIPlayers.find((p) => (p.role || '').includes('WK')) || bowlingXIPlayers[0];
         if (!wicketkeeperId || !bowlingXI_Ids.includes(wicketkeeperId)) {
           setWicketkeeperId(defaultKeeper.id);
         }
@@ -143,17 +232,16 @@ export default function CreateScreen({ navigation }) {
     }
   }, [activeStep, firstInningsBattingTeam.id, selectedXI_A, selectedXI_B]);
 
-  // Player toggle for Playing XI
+  // Player toggle for Playing XI (Requirement 14 & 15: Exactly 11 players, block 12th)
   const togglePlayerXI_A = (id) => {
     if (selectedXI_A.includes(id)) {
-      if (selectedXI_A.length <= 1) {
-        Alert.alert('Playing XI', 'You must have at least 1 player selected.');
-        return;
-      }
       setSelectedXI_A(selectedXI_A.filter((pId) => pId !== id));
     } else {
       if (selectedXI_A.length >= 11) {
-        Alert.alert('Playing XI Limit', 'You have already selected 11 players for ' + teamA.name + '. Deselect a player first.');
+        Alert.alert(
+          'Playing XI Limit',
+          'Playing XI already has 11 players.'
+        );
         return;
       }
       setSelectedXI_A([...selectedXI_A, id]);
@@ -162,37 +250,99 @@ export default function CreateScreen({ navigation }) {
 
   const togglePlayerXI_B = (id) => {
     if (selectedXI_B.includes(id)) {
-      if (selectedXI_B.length <= 1) {
-        Alert.alert('Playing XI', 'You must have at least 1 player selected.');
-        return;
-      }
       setSelectedXI_B(selectedXI_B.filter((pId) => pId !== id));
     } else {
       if (selectedXI_B.length >= 11) {
-        Alert.alert('Playing XI Limit', 'You have already selected 11 players for ' + teamB.name + '. Deselect a player first.');
+        Alert.alert(
+          'Playing XI Limit',
+          'Playing XI already has 11 players.'
+        );
         return;
       }
       setSelectedXI_B([...selectedXI_B, id]);
     }
   };
 
-  // Validate Playing XI
-  const handleValidatePlayingXI = () => {
+  // Validate Playing XI (Requirement 15: Exactly 11 players per team, saves match draft)
+  const handleValidatePlayingXI = async () => {
     if (selectedXI_A.length !== 11) {
+      const diff = 11 - selectedXI_A.length;
       Alert.alert(
         'Incomplete Playing XI',
-        `Please select exactly 11 players for ${teamA.name}. Currently selected: ${selectedXI_A.length}/11.`
+        selectedXI_A.length < 11
+          ? `Select ${diff} more player${diff > 1 ? 's' : ''} for ${teamA.name}. Exactly 11 players required.`
+          : `Playing XI can contain only 11 players for ${teamA.name}. Currently selected: ${selectedXI_A.length}.`
       );
       return;
     }
     if (selectedXI_B.length !== 11) {
+      const diff = 11 - selectedXI_B.length;
       Alert.alert(
         'Incomplete Playing XI',
-        `Please select exactly 11 players for ${teamB.name}. Currently selected: ${selectedXI_B.length}/11.`
+        selectedXI_B.length < 11
+          ? `Select ${diff} more player${diff > 1 ? 's' : ''} for ${teamB.name}. Exactly 11 players required.`
+          : `Playing XI can contain only 11 players for ${teamB.name}. Currently selected: ${selectedXI_B.length}.`
       );
       return;
     }
+
+    // Save match draft without mutating permanent team squads (Requirement 16, 17, 18)
+    const draft = {
+      teamAId: teamA.id,
+      teamBId: teamB.id,
+      teamAPlayingXI: selectedXI_A,
+      teamBPlayingXI: selectedXI_B,
+    };
+    setMatchDraft(draft);
+    await teamService.createMatchDraft(draft);
+
     setActiveStep(5);
+  };
+
+  // Team A / Team B Validation before entering match steps (Requirement 13 & 26)
+  const handleValidateMatchTeams = (nextStep = 2) => {
+    if (teamA.id === teamB.id) {
+      Alert.alert('Invalid Selection', 'Please select two different teams.');
+      return false;
+    }
+
+    const activeA = getActiveMembers(teamA);
+    const activeB = getActiveMembers(teamB);
+
+    if (activeA.length < 11) {
+      const diff = 11 - activeA.length;
+      Alert.alert(
+        'Squad Incomplete',
+        `11 players required for Playing XI. ${teamA.name} currently has ${activeA.length} player${activeA.length === 1 ? '' : 's'} in the squad. (Need ${diff} more).`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Manage Squad',
+            onPress: () => setManagingSquadTeam(teamA),
+          },
+        ]
+      );
+      return false;
+    }
+
+    if (activeB.length < 11) {
+      const diff = 11 - activeB.length;
+      Alert.alert(
+        'Squad Incomplete',
+        `11 players required for Playing XI. ${teamB.name} currently has ${activeB.length} player${activeB.length === 1 ? '' : 's'} in the squad. (Need ${diff} more).`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Manage Squad',
+            onPress: () => setManagingSquadTeam(teamB),
+          },
+        ]
+      );
+      return false;
+    }
+
+    setActiveStep(nextStep);
+    return true;
   };
 
   // Validate Opening Players
@@ -216,35 +366,208 @@ export default function CreateScreen({ navigation }) {
     setActiveStep(6);
   };
 
+  // Create Team Submission Handler (Creator automatically becomes Owner + Captain + Squad Member)
+  const handleCreateTeamSubmit = async () => {
+    if (!newTeamName.trim()) {
+      Alert.alert('Missing Team Name', 'Please enter a name for the new team.');
+      return;
+    }
+    setIsCreatingTeam(true);
+    try {
+      const created = await teamService.createTeam(
+        {
+          name: newTeamName.trim(),
+          shortName: newTeamShortName.trim(),
+          location: newTeamLocation.trim(),
+          logo: newTeamLogo.trim() || undefined,
+          sport: 'Cricket',
+          teamType: newTeamType,
+        },
+        currentUser
+      );
+
+      const updatedTeams = await teamService.getTeams();
+      setAvailableTeams(updatedTeams);
+
+      if (teamPickerSlot === 'A') {
+        setTeamA(created);
+        setSelectedXI_A([currentUser.playerId || currentUser.id]);
+      } else if (teamPickerSlot === 'B') {
+        setTeamB(created);
+        setSelectedXI_B([currentUser.playerId || currentUser.id]);
+      }
+
+      setShowCreateTeamModal(false);
+      setTeamPickerSlot(null);
+      setNewTeamName('');
+      setNewTeamShortName('');
+      setNewTeamLocation('');
+      setNewTeamLogo('');
+      setNewTeamType('Club');
+
+      // Open Team Members modal immediately so creator can add players to squad
+      setManagingSquadTeam(created);
+
+      Alert.alert(
+        'Team Created',
+        `"${created.name}" created! You are the Team Owner & Captain. Add players using Player UID to build your squad, or tap Add Later.`
+      );
+    } catch (err) {
+      console.error('Error creating team:', err);
+      Alert.alert('Error', 'Failed to create team. Please try again.');
+    } finally {
+      setIsCreatingTeam(false);
+    }
+  };
+
+  // Search Player by Player UID (Requirement 3, 5, 20)
+  const handleSearchPlayerByUid = async () => {
+    const cleanUid = searchPlayerUid.trim();
+    if (!cleanUid) {
+      setSearchPlayerError('Please enter a Player UID (e.g. SP-7K4M-92QX)');
+      setSearchedPlayer(null);
+      return;
+    }
+
+    setIsSearchingPlayer(true);
+    setSearchPlayerError('');
+    setSearchedPlayer(null);
+
+    try {
+      const player = await playerService.searchPlayersByUid(cleanUid);
+      if (!player) {
+        setSearchPlayerError('Player not found');
+        return;
+      }
+
+      // Check if player is already in team or is the captain (Requirement 5)
+      const currentTeam = managingSquadTeam;
+      if (currentTeam) {
+        const pId = player.playerId || player.id;
+        const pUid = (player.playerUid || '').toUpperCase();
+
+        const isDuplicate = (currentTeam.members || []).some(
+          (m) =>
+            m.playerId === pId ||
+            m.id === pId ||
+            (m.playerUid && m.playerUid.toUpperCase() === pUid)
+        );
+
+        if (isDuplicate || currentTeam.captainId === pId) {
+          setSearchPlayerError('Player is already in this team.');
+          return;
+        }
+      }
+
+      setSearchedPlayer(player);
+    } catch (err) {
+      console.error('Error searching player:', err);
+      setSearchPlayerError('Error searching player.');
+    } finally {
+      setIsSearchingPlayer(false);
+    }
+  };
+
+  // Add Player to current team's local squad state (Requirement 4 & 5)
+  const handleAddPlayerToSquad = async () => {
+    if (!searchedPlayer || !managingSquadTeam) return;
+
+    setIsInvitingPlayer(true);
+    try {
+      const result = await teamService.addPlayerToTeam(managingSquadTeam.id, searchedPlayer);
+
+      if (!result.success) {
+        setSearchPlayerError(result.error || 'Failed to add player.');
+        return;
+      }
+
+      setManagingSquadTeam(result.team);
+      const updatedTeams = await teamService.getTeams();
+      setAvailableTeams(updatedTeams);
+      if (teamA?.id === result.team.id) setTeamA(result.team);
+      if (teamB?.id === result.team.id) setTeamB(result.team);
+
+      setShowAddPlayerModal(false);
+      setSearchPlayerUid('');
+      setSearchedPlayer(null);
+      setSearchPlayerError('');
+
+      Alert.alert(
+        'Player Added',
+        `${searchedPlayer.name} has been added to ${result.team.name} squad.`
+      );
+    } catch (err) {
+      console.error('Error adding player:', err);
+      Alert.alert('Error', 'Failed to add player.');
+    } finally {
+      setIsInvitingPlayer(false);
+    }
+  };
+
+  // Remove member from team squad
+  const handleRemoveMember = async (playerId) => {
+    if (!managingSquadTeam) return;
+
+    Alert.alert(
+      'Remove Member',
+      'Are you sure you want to remove this player from the team squad?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await teamService.removePlayerFromTeam(managingSquadTeam.id, playerId);
+            if (result.success) {
+              setManagingSquadTeam(result.team);
+              const updatedTeams = await teamService.getTeams();
+              setAvailableTeams(updatedTeams);
+              if (teamA?.id === result.team.id) {
+                setTeamA(result.team);
+                setSelectedXI_A((prev) => prev.filter((id) => id !== playerId));
+              }
+              if (teamB?.id === result.team.id) {
+                setTeamB(result.team);
+                setSelectedXI_B((prev) => prev.filter((id) => id !== playerId));
+              }
+            } else {
+              Alert.alert('Error', result.error || 'Failed to remove member.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Start Match & Transition to Live Scoring
   const handleStartMatch = () => {
-    const currentUserId = accountData?.id;
-    const currentUserName = accountData?.name || accountData?.fullName;
+    const baseXI_A = getActiveMembers(teamA).filter((p) => selectedXI_A.includes(p.id));
+    const baseXI_B = getActiveMembers(teamB).filter((p) => selectedXI_B.includes(p.id));
 
-    const baseXI_A = SQUAD_A.filter((p) => selectedXI_A.includes(p.id)).map((p) => {
-      if (currentUserId && (p.id === currentUserId || (currentUserId === 'usr_arjun123' && p.id === 'a2') || (currentUserName && p.name && p.name.includes(currentUserName)))) {
-        return { ...p, id: currentUserId, userId: currentUserId, name: currentUserName || p.name };
-      }
-      return p;
-    });
-
-    const baseXI_B = SQUAD_B.filter((p) => selectedXI_B.includes(p.id)).map((p) => {
-      if (currentUserId && (p.id === currentUserId || (currentUserId === 'usr_rahul123' && p.id === 'b2') || (currentUserName && p.name && p.name.includes(currentUserName)))) {
-        return { ...p, id: currentUserId, userId: currentUserId, name: currentUserName || p.name };
-      }
-      return p;
-    });
-
-    const strikerPlayer = baseXI_A.concat(baseXI_B).find((p) => p.id === strikerId || (currentUserId && strikerId === 'a2' && p.id === currentUserId)) || battingXIPlayers[0];
-    const nonStrikerPlayer = baseXI_A.concat(baseXI_B).find((p) => p.id === nonStrikerId || (currentUserId && nonStrikerId === 'a2' && p.id === currentUserId)) || battingXIPlayers[1];
-    const openingBowler = baseXI_A.concat(baseXI_B).find((p) => p.id === openingBowlerId) || bowlingXIPlayers[bowlingXIPlayers.length - 1];
-    const wicketkeeper = baseXI_A.concat(baseXI_B).find((p) => p.id === wicketkeeperId) || bowlingXIPlayers[0];
+    const strikerPlayer =
+      battingXIPlayers.find((p) => p.id === strikerId) || battingXIPlayers[0];
+    const nonStrikerPlayer =
+      battingXIPlayers.find((p) => p.id === nonStrikerId) || battingXIPlayers[1];
+    const openingBowler =
+      bowlingXIPlayers.find((p) => p.id === openingBowlerId) ||
+      bowlingXIPlayers[bowlingXIPlayers.length - 1];
+    const wicketkeeper =
+      bowlingXIPlayers.find((p) => p.id === wicketkeeperId) || bowlingXIPlayers[0];
 
     const newMatchData = {
       id: `match_${Date.now()}`,
       teamA: teamA.name,
       teamB: teamB.name,
+      teamAId: teamA.id,
+      teamBId: teamB.id,
       teamAObj: teamA,
       teamBObj: teamB,
+      matchDraft: {
+        teamAId: teamA.id,
+        teamBId: teamB.id,
+        teamAPlayingXI: selectedXI_A,
+        teamBPlayingXI: selectedXI_B,
+      },
       format: matchFormat,
       type: matchType,
       venue,
@@ -347,6 +670,7 @@ export default function CreateScreen({ navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}>
+        {/* Create Match Hero Card */}
         <TouchableOpacity
           className="w-full h-[180px] rounded-2xl overflow-hidden mb-4"
           onPress={() => setActiveStep(1)}
@@ -369,8 +693,14 @@ export default function CreateScreen({ navigation }) {
           </View>
         </TouchableOpacity>
 
+        {/* Hub Action Cards */}
         <View className="flex-row justify-between mb-4">
+          {/* Create Team Card - Reuses real team creation flow */}
           <TouchableOpacity
+            onPress={() => {
+              setTeamPickerSlot(null);
+              setShowCreateTeamModal(true);
+            }}
             className="bg-[#121212] rounded-2xl p-4 border border-[#222222]"
             style={{ width: (width - 48) / 2 }}
           >
@@ -396,6 +726,7 @@ export default function CreateScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
         </View>
+
         <View className="flex-row justify-between mb-4">
           <TouchableOpacity
             className="bg-[#121212] rounded-2xl p-4 border border-[#222222]"
@@ -443,43 +774,89 @@ export default function CreateScreen({ navigation }) {
       <FlowHeader title="Create Match" step={1} totalSteps={6} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: 8 }}>
         <Text className="text-white text-[22px] font-bold mb-1">Match Details</Text>
-        <Text className="text-[#888888] text-[13px] mb-6">Fill in the basic information</Text>
+        <Text className="text-[#888888] text-[13px] mb-6">Select teams and configure match parameters</Text>
 
-        {/* Team A Card */}
-        <TouchableOpacity
-          onPress={() => {
-            setEditingField('teamA');
-            setEditValue(teamA.name);
-          }}
-          className="flex-row justify-between items-center bg-[#121212] border border-[#222222] rounded-xl p-4 mb-4"
-        >
-          <View className="flex-row items-center flex-1">
-            <Image source={{ uri: teamA.logo }} className="w-10 h-10 rounded-full mr-3 bg-[#1a1a1a]" />
-            <View>
-              <Text className="text-white text-sm font-bold mb-0.5">Team A</Text>
-              <Text className="text-[#23c55e] text-xs font-semibold">{teamA.name}</Text>
+        {/* Team A Card (Option A: Select Existing / Option B: Create Team) */}
+        <View className="flex-row justify-between items-center bg-[#121212] border border-[#222222] rounded-xl p-4 mb-4">
+          <TouchableOpacity
+            onPress={() => setTeamPickerSlot('A')}
+            className="flex-row items-center flex-1 mr-2"
+          >
+            <Image
+              source={{ uri: teamA.logo }}
+              className="w-11 h-11 rounded-full mr-3 bg-[#1a1a1a]"
+            />
+            <View className="flex-1">
+              <Text className="text-[#888888] text-xs font-semibold uppercase tracking-wider mb-0.5">
+                Team A (Home)
+              </Text>
+              <Text className="text-white text-base font-bold">{teamA.name}</Text>
+              <Text
+                className={`text-[11px] font-medium mt-0.5 ${
+                  getActiveMembers(teamA).length >= 11 ? 'text-[#23c55e]' : 'text-[#f1c40f]'
+                }`}
+              >
+                {teamA.location || 'Local Ground'} • {getActiveMembers(teamA).length} players{' '}
+                {getActiveMembers(teamA).length >= 11 ? '✓ Ready' : `(Need ${11 - getActiveMembers(teamA).length})`}
+              </Text>
             </View>
+          </TouchableOpacity>
+          <View className="flex-row items-center">
+            <TouchableOpacity
+              onPress={() => setManagingSquadTeam(teamA)}
+              className="bg-[#1e2e1e] px-2.5 py-1.5 rounded-lg border border-[#23c55e]/40 mr-2"
+            >
+              <Text className="text-xs text-[#23c55e] font-bold">Squad</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setTeamPickerSlot('A')}
+              className="bg-[#1a1a1a] px-3 py-1.5 rounded-lg border border-[#333]"
+            >
+              <Text className="text-xs text-white font-bold">Change</Text>
+            </TouchableOpacity>
           </View>
-          <Feather name="edit-2" size={18} color={theme.subText} />
-        </TouchableOpacity>
+        </View>
 
-        {/* Team B Card */}
-        <TouchableOpacity
-          onPress={() => {
-            setEditingField('teamB');
-            setEditValue(teamB.name);
-          }}
-          className="flex-row justify-between items-center bg-[#121212] border border-[#222222] rounded-xl p-4 mb-4"
-        >
-          <View className="flex-row items-center flex-1">
-            <Image source={{ uri: teamB.logo }} className="w-10 h-10 rounded-full mr-3 bg-[#1a1a1a]" />
-            <View>
-              <Text className="text-white text-sm font-bold mb-0.5">Team B</Text>
-              <Text className="text-[#23c55e] text-xs font-semibold">{teamB.name}</Text>
+        {/* Team B Card (Option A: Select Existing / Option B: Create Team) */}
+        <View className="flex-row justify-between items-center bg-[#121212] border border-[#222222] rounded-xl p-4 mb-4">
+          <TouchableOpacity
+            onPress={() => setTeamPickerSlot('B')}
+            className="flex-row items-center flex-1 mr-2"
+          >
+            <Image
+              source={{ uri: teamB.logo }}
+              className="w-11 h-11 rounded-full mr-3 bg-[#1a1a1a]"
+            />
+            <View className="flex-1">
+              <Text className="text-[#888888] text-xs font-semibold uppercase tracking-wider mb-0.5">
+                Team B (Opponent)
+              </Text>
+              <Text className="text-white text-base font-bold">{teamB.name}</Text>
+              <Text
+                className={`text-[11px] font-medium mt-0.5 ${
+                  getActiveMembers(teamB).length >= 11 ? 'text-[#23c55e]' : 'text-[#f1c40f]'
+                }`}
+              >
+                {teamB.location || 'Local Ground'} • {getActiveMembers(teamB).length} players{' '}
+                {getActiveMembers(teamB).length >= 11 ? '✓ Ready' : `(Need ${11 - getActiveMembers(teamB).length})`}
+              </Text>
             </View>
+          </TouchableOpacity>
+          <View className="flex-row items-center">
+            <TouchableOpacity
+              onPress={() => setManagingSquadTeam(teamB)}
+              className="bg-[#1e2e1e] px-2.5 py-1.5 rounded-lg border border-[#23c55e]/40 mr-2"
+            >
+              <Text className="text-xs text-[#23c55e] font-bold">Squad</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setTeamPickerSlot('B')}
+              className="bg-[#1a1a1a] px-3 py-1.5 rounded-lg border border-[#333]"
+            >
+              <Text className="text-xs text-white font-bold">Change</Text>
+            </TouchableOpacity>
           </View>
-          <Feather name="edit-2" size={18} color={theme.subText} />
-        </TouchableOpacity>
+        </View>
 
         {/* Match Format */}
         <Text className="text-white text-sm font-bold mb-3 mt-2">Match Format</Text>
@@ -605,7 +982,7 @@ export default function CreateScreen({ navigation }) {
             }}
             className="flex-row justify-between items-center p-4"
           >
-            <Text className="text-white text-sm">Match Rules</Text>
+            <Text className="text-white text-sm">Rules</Text>
             <View className="flex-row items-center">
               <Text className="text-[#888888] text-[13px] mr-2">{matchRules}</Text>
               <Feather name="chevron-right" size={16} color={theme.subText} />
@@ -613,7 +990,7 @@ export default function CreateScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
-      <PrimaryButton title="Continue to Match Setup" onPress={() => setActiveStep(2)} />
+      <PrimaryButton title="Continue to Match Setup" onPress={() => handleValidateMatchTeams(2)} />
     </View>
   );
 
@@ -668,13 +1045,13 @@ export default function CreateScreen({ navigation }) {
             <Text className="text-[#888888] text-[13px]">Players</Text>
             <Text className="text-white text-[13px] font-bold">11 vs 11</Text>
           </View>
-          <View className="flex-row justify-between py-3.5">
-            <Text className="text-[#888888] text-[13px]">Match Rules</Text>
+          <View className="flex-row justify-between py-3.5 border-b border-[#222222]">
+            <Text className="text-[#888888] text-[13px]">Rules</Text>
             <Text className="text-white text-[13px] font-bold">{matchRules}</Text>
           </View>
         </View>
       </ScrollView>
-      <PrimaryButton title="Continue to Toss" onPress={() => setActiveStep(3)} />
+      <PrimaryButton title="Continue to Toss" onPress={() => handleValidateMatchTeams(3)} />
     </View>
   );
 
@@ -683,39 +1060,63 @@ export default function CreateScreen({ navigation }) {
   // ==========================================
   const renderStep3 = () => (
     <View className="flex-1 bg-[#0a0a0a]">
-      <FlowHeader title="Match Toss" step={3} totalSteps={6} />
+      <FlowHeader title="Toss" step={3} totalSteps={6} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: 8 }}>
-        <Text className="text-white text-[22px] font-bold mb-1">Toss</Text>
-        <Text className="text-[#888888] text-[13px] mb-6">Select the team that won the toss</Text>
+        <Text className="text-white text-[22px] font-bold mb-1">Match Toss</Text>
+        <Text className="text-[#888888] text-[13px] mb-6">
+          Record who won the toss and their decision
+        </Text>
 
-        <View className="flex-row justify-between mb-4">
+        {/* Toss Winner Selector */}
+        <Text className="text-white text-sm font-bold mb-3">Who won the toss?</Text>
+        <View className="flex-row justify-between mb-6">
           <TouchableOpacity
-            className={`w-[48%] border rounded-xl p-6 items-center ${
+            className={`w-[48%] border rounded-xl p-4 items-center ${
               tossWinner === 'A'
                 ? 'border-[#23c55e] bg-[#23c55e]/15'
                 : 'bg-[#121212] border-[#222222]'
             }`}
             onPress={() => setTossWinner('A')}
           >
-            <Image source={{ uri: teamA.logo }} className="w-[60px] h-[60px] rounded-full mb-3" />
-            <Text className="text-white text-sm font-bold text-center">{teamA.name}</Text>
+            <Image
+              source={{ uri: teamA.logo }}
+              className="w-10 h-10 rounded-full mb-2 bg-[#1a1a1a]"
+            />
+            <Text
+              className={`text-sm font-bold text-center ${
+                tossWinner === 'A' ? 'text-[#23c55e]' : 'text-white'
+              }`}
+            >
+              {teamA.name}
+            </Text>
+            <Text className="text-[#888888] text-[10px] mt-0.5">Team A</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
-            className={`w-[48%] border rounded-xl p-6 items-center ${
+            className={`w-[48%] border rounded-xl p-4 items-center ${
               tossWinner === 'B'
                 ? 'border-[#23c55e] bg-[#23c55e]/15'
                 : 'bg-[#121212] border-[#222222]'
             }`}
             onPress={() => setTossWinner('B')}
           >
-            <Image source={{ uri: teamB.logo }} className="w-[60px] h-[60px] rounded-full mb-3" />
-            <Text className="text-white text-sm font-bold text-center">{teamB.name}</Text>
+            <Image
+              source={{ uri: teamB.logo }}
+              className="w-10 h-10 rounded-full mb-2 bg-[#1a1a1a]"
+            />
+            <Text
+              className={`text-sm font-bold text-center ${
+                tossWinner === 'B' ? 'text-[#23c55e]' : 'text-white'
+              }`}
+            >
+              {teamB.name}
+            </Text>
+            <Text className="text-[#888888] text-[10px] mt-0.5">Team B</Text>
           </TouchableOpacity>
         </View>
 
-        <Text className="text-white text-[22px] font-bold mb-1 mt-4">Decision</Text>
-        <Text className="text-[#888888] text-[13px] mb-6">What did the toss winner elect to do?</Text>
-
+        {/* Toss Decision Selector */}
+        <Text className="text-white text-sm font-bold mb-3">Elected to?</Text>
         <View className="flex-row justify-between mb-6">
           <TouchableOpacity
             className={`w-[48%] border rounded-xl p-4 items-center ${
@@ -725,8 +1126,8 @@ export default function CreateScreen({ navigation }) {
             }`}
             onPress={() => setTossDecision('Bat')}
           >
-            <MaterialIcons
-              name="sports-cricket"
+            <MaterialCommunityIcons
+              name="cricket"
               size={24}
               color={tossDecision === 'Bat' ? theme.primary : theme.text}
               style={{ marginBottom: 8 }}
@@ -778,131 +1179,170 @@ export default function CreateScreen({ navigation }) {
           </View>
         </View>
       </ScrollView>
-      <PrimaryButton title="Continue to Playing XI" onPress={() => setActiveStep(4)} />
+      <PrimaryButton title="Continue to Playing XI" onPress={() => handleValidateMatchTeams(4)} />
     </View>
   );
 
   // ==========================================
-  // STEP 4: PLAYING XI
+  // STEP 4: PLAYING XI (Uses Real Team Members with Player IDs)
   // ==========================================
-  const renderStep4 = () => (
-    <View className="flex-1 bg-[#0a0a0a]">
-      <FlowHeader title="Select Playing XI" step={4} totalSteps={6} />
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: 8 }}>
-        <Text className="text-white text-[22px] font-bold mb-1">Playing XI</Text>
-        <Text className="text-[#888888] text-[13px] mb-6">
-          Select exactly 11 players for both teams
-        </Text>
+  const renderStep4 = () => {
+    const activeTeamA = getActiveMembers(teamA);
+    const activeTeamB = getActiveMembers(teamB);
 
-        {/* Team A Playing XI */}
-        <View className="bg-[#121212] border border-[#222222] rounded-xl p-4 mb-5">
-          <View className="flex-row justify-between items-center mb-4 border-b border-[#222222] pb-3">
-            <View className="flex-row items-center">
-              <Image source={{ uri: teamA.logo }} className="w-7 h-7 rounded-full mr-2.5" />
-              <Text className="text-white text-[15px] font-bold">{teamA.name}</Text>
-            </View>
-            <View className="flex-row items-center">
-              <Text
-                className={`text-xs font-bold mr-2 ${
-                  selectedXI_A.length === 11 ? 'text-[#23c55e]' : 'text-[#f1c40f]'
-                }`}
-              >
-                {selectedXI_A.length} / 11 selected
-              </Text>
-              {selectedXI_A.length !== 11 && (
-                <TouchableOpacity
-                  onPress={() => setSelectedXI_A(SQUAD_A.slice(0, 11).map((p) => p.id))}
-                  className="bg-[#23c55e]/20 px-2 py-0.5 rounded"
+    return (
+      <View className="flex-1 bg-[#0a0a0a]">
+        <FlowHeader title="Select Playing XI" step={4} totalSteps={6} />
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: 8 }}>
+          <Text className="text-white text-[22px] font-bold mb-1">Playing XI</Text>
+          <Text className="text-[#888888] text-[13px] mb-6">
+            Select exactly 11 players for both teams
+          </Text>
+
+          {/* Team A Playing XI */}
+          <View className="bg-[#121212] border border-[#222222] rounded-xl p-4 mb-5">
+            <View className="flex-row justify-between items-center mb-4 border-b border-[#222222] pb-3">
+              <View className="flex-row items-center">
+                <Image source={{ uri: teamA.logo }} className="w-7 h-7 rounded-full mr-2.5" />
+                <Text className="text-white text-[15px] font-bold">{teamA.name}</Text>
+              </View>
+              <View className="flex-row items-center">
+                <Text
+                  className={`text-xs font-bold mr-2 ${
+                    selectedXI_A.length === 11 ? 'text-[#23c55e]' : 'text-[#f1c40f]'
+                  }`}
                 >
-                  <Text className="text-[#23c55e] text-[10px] font-bold">Select 11</Text>
-                </TouchableOpacity>
-              )}
+                  Selected: {selectedXI_A.length} / 11 {selectedXI_A.length === 11 ? '✓' : ''}
+                </Text>
+                {selectedXI_A.length !== 11 && activeTeamA.length >= 11 && (
+                  <TouchableOpacity
+                    onPress={() => setSelectedXI_A(activeTeamA.slice(0, 11).map((p) => p.id))}
+                    className="bg-[#23c55e]/20 px-2 py-0.5 rounded"
+                  >
+                    <Text className="text-[#23c55e] text-[10px] font-bold">Select 11</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
+
+            {activeTeamA.map((p) => {
+              const isSelected = selectedXI_A.includes(p.id);
+              const isMe = currentUser?.playerId && (p.id === currentUser.playerId || p.playerId === currentUser.playerId);
+
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  onPress={() => togglePlayerXI_A(p.id)}
+                  className={`flex-row items-center p-2 rounded-lg mb-2 ${
+                    isSelected ? 'bg-[#1a2e1d]/40 border border-[#23c55e]/40' : 'bg-[#181818]'
+                  }`}
+                >
+                  <Image
+                    source={{
+                      uri:
+                        p.avatar ||
+                        p.img ||
+                        `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=1e3a29&color=fff`,
+                    }}
+                    className="w-8 h-8 rounded-full mr-3"
+                  />
+                  <View className="flex-1">
+                    <View className="flex-row items-center">
+                      <Text className="text-white text-xs font-semibold mr-1.5">{p.name}</Text>
+                      {isMe && (
+                        <View className="bg-[#23c55e]/20 border border-[#23c55e] px-1.5 py-0.2 rounded">
+                          <Text className="text-[#23c55e] text-[9px] font-bold">YOU</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text className="text-[#888888] text-[10px]">
+                      {p.role} • {p.style || p.battingStyle || 'Player'}
+                    </Text>
+                  </View>
+                  {isSelected ? (
+                    <Feather name="check-circle" size={18} color={theme.primary} />
+                  ) : (
+                    <Feather name="circle" size={18} color="#555" />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
-          {SQUAD_A.map((p) => {
-            const isSelected = selectedXI_A.includes(p.id);
-            return (
-              <TouchableOpacity
-                key={p.id}
-                onPress={() => togglePlayerXI_A(p.id)}
-                className={`flex-row items-center p-2 rounded-lg mb-2 ${
-                  isSelected ? 'bg-[#1a2e1d]/40 border border-[#23c55e]/40' : 'bg-[#181818]'
-                }`}
-              >
-                <Image source={{ uri: p.img }} className="w-8 h-8 rounded-full mr-3" />
-                <View className="flex-1">
-                  <Text className="text-white text-xs font-semibold">{p.name}</Text>
-                  <Text className="text-[#888888] text-[10px]">
-                    {p.role} • {p.style}
-                  </Text>
-                </View>
-                {isSelected ? (
-                  <Feather name="check-circle" size={18} color={theme.primary} />
-                ) : (
-                  <Feather name="circle" size={18} color="#555" />
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Team B Playing XI */}
-        <View className="bg-[#121212] border border-[#222222] rounded-xl p-4 mb-4">
-          <View className="flex-row justify-between items-center mb-4 border-b border-[#222222] pb-3">
-            <View className="flex-row items-center">
-              <Image source={{ uri: teamB.logo }} className="w-7 h-7 rounded-full mr-2.5" />
-              <Text className="text-white text-[15px] font-bold">{teamB.name}</Text>
-            </View>
-            <View className="flex-row items-center">
-              <Text
-                className={`text-xs font-bold mr-2 ${
-                  selectedXI_B.length === 11 ? 'text-[#23c55e]' : 'text-[#f1c40f]'
-                }`}
-              >
-                {selectedXI_B.length} / 11 selected
-              </Text>
-              {selectedXI_B.length !== 11 && (
-                <TouchableOpacity
-                  onPress={() => setSelectedXI_B(SQUAD_B.slice(0, 11).map((p) => p.id))}
-                  className="bg-[#23c55e]/20 px-2 py-0.5 rounded"
+          {/* Team B Playing XI */}
+          <View className="bg-[#121212] border border-[#222222] rounded-xl p-4 mb-4">
+            <View className="flex-row justify-between items-center mb-4 border-b border-[#222222] pb-3">
+              <View className="flex-row items-center">
+                <Image source={{ uri: teamB.logo }} className="w-7 h-7 rounded-full mr-2.5" />
+                <Text className="text-white text-[15px] font-bold">{teamB.name}</Text>
+              </View>
+              <View className="flex-row items-center">
+                <Text
+                  className={`text-xs font-bold mr-2 ${
+                    selectedXI_B.length === 11 ? 'text-[#23c55e]' : 'text-[#f1c40f]'
+                  }`}
                 >
-                  <Text className="text-[#23c55e] text-[10px] font-bold">Select 11</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-
-          {SQUAD_B.map((p) => {
-            const isSelected = selectedXI_B.includes(p.id);
-            return (
-              <TouchableOpacity
-                key={p.id}
-                onPress={() => togglePlayerXI_B(p.id)}
-                className={`flex-row items-center p-2 rounded-lg mb-2 ${
-                  isSelected ? 'bg-[#1a2e1d]/40 border border-[#23c55e]/40' : 'bg-[#181818]'
-                }`}
-              >
-                <Image source={{ uri: p.img }} className="w-8 h-8 rounded-full mr-3" />
-                <View className="flex-1">
-                  <Text className="text-white text-xs font-semibold">{p.name}</Text>
-                  <Text className="text-[#888888] text-[10px]">
-                    {p.role} • {p.style}
-                  </Text>
-                </View>
-                {isSelected ? (
-                  <Feather name="check-circle" size={18} color={theme.primary} />
-                ) : (
-                  <Feather name="circle" size={18} color="#555" />
+                  Selected: {selectedXI_B.length} / 11 {selectedXI_B.length === 11 ? '✓' : ''}
+                </Text>
+                {selectedXI_B.length !== 11 && activeTeamB.length >= 11 && (
+                  <TouchableOpacity
+                    onPress={() => setSelectedXI_B(activeTeamB.slice(0, 11).map((p) => p.id))}
+                    className="bg-[#23c55e]/20 px-2 py-0.5 rounded"
+                  >
+                    <Text className="text-[#23c55e] text-[10px] font-bold">Select 11</Text>
+                  </TouchableOpacity>
                 )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </ScrollView>
-      <PrimaryButton title="Continue to Opening Players" onPress={handleValidatePlayingXI} />
-    </View>
-  );
+              </View>
+            </View>
+
+            {activeTeamB.map((p) => {
+              const isSelected = selectedXI_B.includes(p.id);
+              const isMe = currentUser?.playerId && (p.id === currentUser.playerId || p.playerId === currentUser.playerId);
+
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  onPress={() => togglePlayerXI_B(p.id)}
+                  className={`flex-row items-center p-2 rounded-lg mb-2 ${
+                    isSelected ? 'bg-[#1a2e1d]/40 border border-[#23c55e]/40' : 'bg-[#181818]'
+                  }`}
+                >
+                  <Image
+                    source={{
+                      uri:
+                        p.avatar ||
+                        p.img ||
+                        `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=b9770e&color=fff`,
+                    }}
+                    className="w-8 h-8 rounded-full mr-3"
+                  />
+                  <View className="flex-1">
+                    <View className="flex-row items-center">
+                      <Text className="text-white text-xs font-semibold mr-1.5">{p.name}</Text>
+                      {isMe && (
+                        <View className="bg-[#23c55e]/20 border border-[#23c55e] px-1.5 py-0.2 rounded">
+                          <Text className="text-[#23c55e] text-[9px] font-bold">YOU</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text className="text-[#888888] text-[10px]">
+                      {p.role} • {p.style || p.battingStyle || 'Player'}
+                    </Text>
+                  </View>
+                  {isSelected ? (
+                    <Feather name="check-circle" size={18} color={theme.primary} />
+                  ) : (
+                    <Feather name="circle" size={18} color="#555" />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </ScrollView>
+        <PrimaryButton title="Continue to Opening Players" onPress={handleValidatePlayingXI} />
+      </View>
+    );
+  };
 
   // ==========================================
   // STEP 5: OPENING PLAYERS
@@ -910,7 +1350,9 @@ export default function CreateScreen({ navigation }) {
   const renderStep5 = () => {
     const strikerPlayer = battingXIPlayers.find((p) => p.id === strikerId) || battingXIPlayers[0];
     const nonStrikerPlayer = battingXIPlayers.find((p) => p.id === nonStrikerId) || battingXIPlayers[1];
-    const openingBowler = bowlingXIPlayers.find((p) => p.id === openingBowlerId) || bowlingXIPlayers[bowlingXIPlayers.length - 1];
+    const openingBowler =
+      bowlingXIPlayers.find((p) => p.id === openingBowlerId) ||
+      bowlingXIPlayers[bowlingXIPlayers.length - 1];
     const wicketkeeper = bowlingXIPlayers.find((p) => p.id === wicketkeeperId) || bowlingXIPlayers[0];
 
     return (
@@ -950,11 +1392,19 @@ export default function CreateScreen({ navigation }) {
             <Text className="text-[#888888] text-sm font-bold w-6">1.</Text>
             {strikerPlayer && (
               <>
-                <Image source={{ uri: strikerPlayer.img }} className="w-8 h-8 rounded-full mr-3" />
+                <Image
+                  source={{
+                    uri:
+                      strikerPlayer.avatar ||
+                      strikerPlayer.img ||
+                      `https://ui-avatars.com/api/?name=${encodeURIComponent(strikerPlayer.name)}&background=1e3a29&color=fff`,
+                  }}
+                  className="w-8 h-8 rounded-full mr-3"
+                />
                 <View className="flex-1">
                   <Text className="text-white text-sm font-bold">{strikerPlayer.name}</Text>
                   <Text className="text-[#888888] text-[10px]">
-                    {strikerPlayer.role} • {strikerPlayer.style}
+                    {strikerPlayer.role} • {strikerPlayer.style || strikerPlayer.battingStyle}
                   </Text>
                 </View>
               </>
@@ -980,11 +1430,19 @@ export default function CreateScreen({ navigation }) {
             <Text className="text-[#888888] text-sm font-bold w-6">2.</Text>
             {nonStrikerPlayer && (
               <>
-                <Image source={{ uri: nonStrikerPlayer.img }} className="w-8 h-8 rounded-full mr-3" />
+                <Image
+                  source={{
+                    uri:
+                      nonStrikerPlayer.avatar ||
+                      nonStrikerPlayer.img ||
+                      `https://ui-avatars.com/api/?name=${encodeURIComponent(nonStrikerPlayer.name)}&background=1e3a29&color=fff`,
+                  }}
+                  className="w-8 h-8 rounded-full mr-3"
+                />
                 <View className="flex-1">
                   <Text className="text-white text-sm font-bold">{nonStrikerPlayer.name}</Text>
                   <Text className="text-[#888888] text-[10px]">
-                    {nonStrikerPlayer.role} • {nonStrikerPlayer.style}
+                    {nonStrikerPlayer.role} • {nonStrikerPlayer.style || nonStrikerPlayer.battingStyle}
                   </Text>
                 </View>
               </>
@@ -1018,11 +1476,19 @@ export default function CreateScreen({ navigation }) {
             <Text className="text-[#888888] text-sm font-bold w-6">1.</Text>
             {openingBowler && (
               <>
-                <Image source={{ uri: openingBowler.img }} className="w-8 h-8 rounded-full mr-3" />
+                <Image
+                  source={{
+                    uri:
+                      openingBowler.avatar ||
+                      openingBowler.img ||
+                      `https://ui-avatars.com/api/?name=${encodeURIComponent(openingBowler.name)}&background=1e3a29&color=fff`,
+                  }}
+                  className="w-8 h-8 rounded-full mr-3"
+                />
                 <View className="flex-1">
                   <Text className="text-white text-sm font-bold">{openingBowler.name}</Text>
                   <Text className="text-[#888888] text-[10px]">
-                    {openingBowler.role} • {openingBowler.style}
+                    {openingBowler.role} • {openingBowler.style || openingBowler.bowlingStyle}
                   </Text>
                 </View>
               </>
@@ -1061,11 +1527,19 @@ export default function CreateScreen({ navigation }) {
             />
             {wicketkeeper && (
               <>
-                <Image source={{ uri: wicketkeeper.img }} className="w-8 h-8 rounded-full mr-3" />
+                <Image
+                  source={{
+                    uri:
+                      wicketkeeper.avatar ||
+                      wicketkeeper.img ||
+                      `https://ui-avatars.com/api/?name=${encodeURIComponent(wicketkeeper.name)}&background=1e3a29&color=fff`,
+                  }}
+                  className="w-8 h-8 rounded-full mr-3"
+                />
                 <View className="flex-1">
                   <Text className="text-white text-sm font-bold">{wicketkeeper.name}</Text>
                   <Text className="text-[#888888] text-[10px]">
-                    {wicketkeeper.role} • {wicketkeeper.style}
+                    {wicketkeeper.role} • {wicketkeeper.style || wicketkeeper.battingStyle}
                   </Text>
                 </View>
               </>
@@ -1084,7 +1558,9 @@ export default function CreateScreen({ navigation }) {
   const renderStep6 = () => {
     const strikerPlayer = battingXIPlayers.find((p) => p.id === strikerId) || battingXIPlayers[0];
     const nonStrikerPlayer = battingXIPlayers.find((p) => p.id === nonStrikerId) || battingXIPlayers[1];
-    const openingBowler = bowlingXIPlayers.find((p) => p.id === openingBowlerId) || bowlingXIPlayers[bowlingXIPlayers.length - 1];
+    const openingBowler =
+      bowlingXIPlayers.find((p) => p.id === openingBowlerId) ||
+      bowlingXIPlayers[bowlingXIPlayers.length - 1];
     const wicketkeeper = bowlingXIPlayers.find((p) => p.id === wicketkeeperId) || bowlingXIPlayers[0];
 
     return (
@@ -1150,96 +1626,61 @@ export default function CreateScreen({ navigation }) {
             </View>
           </View>
         </ScrollView>
-        <PrimaryButton title="Let's Begin the Game" onPress={() => setActiveStep(7)} />
+        <PrimaryButton title="Go to Live Scoring" onPress={handleStartMatch} />
       </View>
     );
   };
 
   // ==========================================
-  // STEP 7: LIVE MATCH PREVIEW (LET'S BEGIN THE GAME)
+  // STEP 7: LIVE PREVIEW
   // ==========================================
   const renderStep7 = () => {
     const strikerPlayer = battingXIPlayers.find((p) => p.id === strikerId) || battingXIPlayers[0];
     const nonStrikerPlayer = battingXIPlayers.find((p) => p.id === nonStrikerId) || battingXIPlayers[1];
-    const openingBowler = bowlingXIPlayers.find((p) => p.id === openingBowlerId) || bowlingXIPlayers[bowlingXIPlayers.length - 1];
+    const openingBowler =
+      bowlingXIPlayers.find((p) => p.id === openingBowlerId) ||
+      bowlingXIPlayers[bowlingXIPlayers.length - 1];
     const wicketkeeper = bowlingXIPlayers.find((p) => p.id === wicketkeeperId) || bowlingXIPlayers[0];
 
     return (
       <View className="flex-1 bg-[#0a0a0a]">
-        <FlowHeader title="Match Started" step={0} />
+        <FlowHeader title="Live Match Preview" step={7} totalSteps={7} />
         <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: 8 }}>
-          <View className="items-center mb-6">
-            <Text className="text-white text-2xl font-bold mb-2">Let's begin the game!</Text>
-            <View className="bg-[#e74c3c] px-2.5 py-1 rounded">
-              <Text className="text-white text-[10px] font-bold tracking-widest">LIVE</Text>
-            </View>
-          </View>
+          <Text className="text-white text-[22px] font-bold mb-1">Live Match Preview</Text>
+          <Text className="text-[#888888] text-[13px] mb-4">
+            Simulated view of the live scoring interface
+          </Text>
 
-          <View className="bg-[#121212] rounded-2xl border border-[#222222] p-6 mb-6">
-            <View className="flex-row justify-between items-center mb-6">
-              <View className="items-center">
+          <View className="bg-[#121212] border border-[#222222] rounded-2xl p-5 mb-4">
+            <View className="flex-row items-center justify-between mb-3">
+              <View className="bg-[#ef4444] px-2.5 py-0.5 rounded-full flex-row items-center">
+                <View className="w-1.5 h-1.5 rounded-full bg-white mr-1.5 animate-pulse" />
+                <Text className="text-white text-[10px] font-bold uppercase">LIVE</Text>
+              </View>
+              <Text className="text-[#888888] text-xs">
+                {matchFormat} • Innings 1 • 0.0 / {oversPerInnings} Ov
+              </Text>
+            </View>
+
+            <View className="flex-row items-center justify-between mb-4">
+              <View className="flex-row items-center">
                 <Image
                   source={{ uri: firstInningsBattingTeam.logo }}
-                  className="w-[70px] h-[70px] rounded-full bg-[#1a1a1a] mb-3"
+                  className="w-10 h-10 rounded-full mr-3"
                 />
-                <Text className="text-white text-[32px] font-bold mt-2 mb-0.5">0/0</Text>
-                <Text className="text-[#888888] text-[13px]">0.0 Overs (Max {oversPerInnings})</Text>
-                <Text className="text-[#23c55e] text-xs font-bold mt-1">
-                  {firstInningsBattingTeam.name}
-                </Text>
+                <View>
+                  <Text className="text-white text-base font-bold">
+                    {firstInningsBattingTeam.name}
+                  </Text>
+                  <Text className="text-[#888888] text-xs">
+                    Toss: {winnerTeam.name} ({tossDecision})
+                  </Text>
+                </View>
               </View>
-              <Text className="text-[#888888] text-base font-bold mx-4">VS</Text>
-              <View className="items-center">
-                <Image
-                  source={{ uri: firstInningsBowlingTeam.logo }}
-                  className="w-[70px] h-[70px] rounded-full bg-[#1a1a1a] mb-3"
-                />
-                <Text className="text-white text-sm font-bold text-center mt-3">
-                  {firstInningsBowlingTeam.name}
-                </Text>
-                <Text className="text-[#888888] text-xs mt-1">Fielding</Text>
+              <View className="items-end">
+                <Text className="text-white text-3xl font-extrabold">0 / 0</Text>
+                <Text className="text-[#888888] text-xs font-semibold">CRR: 0.00</Text>
               </View>
-            </View>
-            <View className="border-t border-[#222222] pt-4 items-center">
-              <Text className="text-white text-xs font-medium text-center">
-                {winnerTeam.name} won the toss and elected to {tossDecision}
-              </Text>
-            </View>
-          </View>
-
-          <Text className="text-white text-sm font-bold mb-3">Next Up</Text>
-          <View className="bg-[#121212] rounded-2xl border border-[#222222] p-4">
-            <View className="flex-row items-center mb-3">
-              <Text className="text-[#888888] text-[11px] w-[65px]">On Strike</Text>
-              <Image source={{ uri: strikerPlayer?.img }} className="w-7 h-7 rounded-full mx-3" />
-              <Text className="text-white text-[13px] font-semibold flex-1">
-                {strikerPlayer?.name}
-              </Text>
-              <Text className="text-white text-[13px] font-bold">0 (0)</Text>
-            </View>
-            <View className="flex-row items-center mb-3 border-b border-[#222222] pb-4">
-              <Text className="text-[#888888] text-[11px] w-[65px]">Non-Striker</Text>
-              <Image source={{ uri: nonStrikerPlayer?.img }} className="w-7 h-7 rounded-full mx-3" />
-              <Text className="text-white text-[13px] font-semibold flex-1">
-                {nonStrikerPlayer?.name}
-              </Text>
-              <Text className="text-white text-[13px] font-bold">0 (0)</Text>
-            </View>
-            <View className="flex-row items-center pt-1 mb-3 border-b border-[#222222] pb-4">
-              <Text className="text-[#888888] text-[11px] w-[65px]">Bowler</Text>
-              <Image source={{ uri: openingBowler?.img }} className="w-7 h-7 rounded-full mx-3" />
-              <Text className="text-white text-[13px] font-semibold flex-1">
-                {openingBowler?.name}
-              </Text>
-              <Text className="text-white text-[13px] font-bold">0-0 (0.0)</Text>
-            </View>
-            <View className="flex-row items-center pt-1">
-              <Text className="text-[#888888] text-[11px] w-[65px]">Keeper</Text>
-              <Image source={{ uri: wicketkeeper?.img }} className="w-7 h-7 rounded-full mx-3" />
-              <Text className="text-white text-[13px] font-semibold flex-1">
-                {wicketkeeper?.name}
-              </Text>
-              <Text className="text-[#888888] text-[11px]">WK</Text>
             </View>
           </View>
         </ScrollView>
@@ -1251,6 +1692,753 @@ export default function CreateScreen({ navigation }) {
   // ==========================================
   // MODALS
   // ==========================================
+
+  // 1. Team Picker Modal (Option A & Option B with search and squad view)
+  const renderTeamPickerModal = () => {
+    const currentUserId = currentUser?.playerId || 'player-001';
+    const cleanQuery = teamSearchQuery.trim().toLowerCase();
+
+    const filteredTeams = cleanQuery
+      ? availableTeams.filter(
+          (t) =>
+            t.name.toLowerCase().includes(cleanQuery) ||
+            (t.shortName && t.shortName.toLowerCase().includes(cleanQuery))
+        )
+      : availableTeams;
+
+    const myTeams = filteredTeams.filter(
+      (t) =>
+        t.captainId === currentUserId ||
+        (t.members || []).some(
+          (m) =>
+            (m.playerId === currentUserId || m.id === currentUserId) &&
+            m.status === 'accepted'
+        )
+    );
+    const otherTeams = filteredTeams.filter((t) => !myTeams.some((mt) => mt.id === t.id));
+
+    const handleSelectTeam = (selectedTeam) => {
+      // Prevent selecting the same team for Team A and Team B (Requirement 13)
+      if (
+        (teamPickerSlot === 'A' && teamB?.id === selectedTeam.id) ||
+        (teamPickerSlot === 'B' && teamA?.id === selectedTeam.id)
+      ) {
+        Alert.alert('Invalid Selection', 'Please select two different teams.');
+        return;
+      }
+
+      const activeMembers = getActiveMembers(selectedTeam);
+      if (teamPickerSlot === 'A') {
+        setTeamA(selectedTeam);
+        setSelectedXI_A(activeMembers.slice(0, 11).map((p) => p.id));
+      } else if (teamPickerSlot === 'B') {
+        setTeamB(selectedTeam);
+        setSelectedXI_B(activeMembers.slice(0, 11).map((p) => p.id));
+      }
+      setTeamPickerSlot(null);
+      setTeamSearchQuery('');
+    };
+
+    const renderTeamCard = (t) => {
+      const currentSelected =
+        teamPickerSlot === 'A' ? teamA?.id === t.id : teamB?.id === t.id;
+      const isOtherTeam =
+        teamPickerSlot === 'A' ? teamB?.id === t.id : teamA?.id === t.id;
+      const activeMembers = getActiveMembers(t);
+      const isReady = activeMembers.length >= 11;
+
+      return (
+        <View
+          key={t.id}
+          className={`flex-row items-center p-3.5 rounded-xl mb-3 border ${
+            currentSelected
+              ? 'bg-[#1a2e1d] border-[#23c55e]'
+              : isOtherTeam
+              ? 'bg-[#141414] border-[#222222] opacity-60'
+              : 'bg-[#181818] border-[#262626]'
+          }`}
+        >
+          <TouchableOpacity
+            onPress={() => handleSelectTeam(t)}
+            className="flex-row items-center flex-1 mr-2"
+          >
+            <Image source={{ uri: t.logo }} className="w-11 h-11 rounded-full mr-3.5 bg-[#222]" />
+            <View className="flex-1">
+              <View className="flex-row items-center">
+                <Text className="text-white text-sm font-bold mr-2">{t.name}</Text>
+                {t.shortName && (
+                  <View className="bg-[#222] px-1.5 py-0.5 rounded">
+                    <Text className="text-[#888888] text-[10px] font-bold">{t.shortName}</Text>
+                  </View>
+                )}
+              </View>
+              <Text className="text-[#888888] text-xs mt-0.5">
+                {t.location || 'Local Ground'} • {activeMembers.length} active players
+              </Text>
+              <Text
+                className={`text-[10px] font-semibold mt-0.5 ${
+                  isReady ? 'text-[#23c55e]' : 'text-[#f1c40f]'
+                }`}
+              >
+                {isReady ? '✓ Match Ready' : `⚠️ 11 players required for Playing XI (Have ${activeMembers.length})`}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <View className="flex-row items-center">
+            <TouchableOpacity
+              onPress={() => setManagingSquadTeam(t)}
+              className="bg-[#1e2e1e] px-2.5 py-1.5 rounded-lg border border-[#23c55e]/40 mr-2"
+            >
+              <Text className="text-xs text-[#23c55e] font-bold">Squad</Text>
+            </TouchableOpacity>
+            {currentSelected ? (
+              <Feather name="check-circle" size={20} color={theme.primary} />
+            ) : isOtherTeam ? (
+              <TouchableOpacity
+                onPress={() => Alert.alert('Invalid Selection', 'Please select two different teams.')}
+                className="bg-[#222] px-2 py-1 rounded"
+              >
+                <Text className="text-[#888] text-[10px] font-semibold">Opponent</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={() => handleSelectTeam(t)}
+              >
+                <Feather name="chevron-right" size={18} color="#555" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      );
+    };
+
+    return (
+      <Modal visible={!!teamPickerSlot} transparent animationType="slide">
+        <View className="flex-1 bg-black/80 justify-end">
+          <View className="bg-[#121212] border-t border-[#222222] rounded-t-3xl max-h-[85%] p-5">
+            <View className="flex-row justify-between items-center mb-3">
+              <View>
+                <Text className="text-white text-lg font-bold">
+                  Select Team {teamPickerSlot}
+                </Text>
+                <Text className="text-[#888888] text-xs">
+                  Pick an existing team or create a new team
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setTeamPickerSlot(null);
+                  setTeamSearchQuery('');
+                }}
+                className="w-8 h-8 rounded-full bg-[#1a1a1a] items-center justify-center"
+              >
+                <Feather name="x" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Team Search (Requirement 11 & 12) */}
+            <View className="flex-row items-center bg-[#1a1a1a] border border-[#333] rounded-xl px-3 py-1 mb-3">
+              <Feather name="search" size={16} color="#888" style={{ marginRight: 8 }} />
+              <TextInput
+                value={teamSearchQuery}
+                onChangeText={setTeamSearchQuery}
+                placeholder="Search teams by name or code..."
+                placeholderTextColor="#666"
+                className="flex-1 text-white text-xs py-2"
+              />
+              {teamSearchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setTeamSearchQuery('')}>
+                  <Feather name="x-circle" size={16} color="#888" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Create Team Button */}
+            <TouchableOpacity
+              onPress={() => {
+                setShowCreateTeamModal(true);
+              }}
+              className="flex-row items-center justify-center bg-[#23c55e]/15 border border-[#23c55e] rounded-xl p-3 mb-4"
+            >
+              <Feather name="plus-circle" size={18} color={theme.primary} style={{ marginRight: 8 }} />
+              <Text className="text-[#23c55e] text-xs font-bold">+ Create New Team</Text>
+            </TouchableOpacity>
+
+            <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
+              {myTeams.length > 0 && (
+                <View className="mb-4">
+                  <Text className="text-[#888888] text-[11px] font-bold uppercase tracking-wider mb-2">
+                    My Teams
+                  </Text>
+                  {myTeams.map(renderTeamCard)}
+                </View>
+              )}
+
+              <View>
+                <Text className="text-[#888888] text-[11px] font-bold uppercase tracking-wider mb-2">
+                  {cleanQuery ? 'Search Results' : 'Available Teams'}
+                </Text>
+                {otherTeams.length > 0 ? (
+                  otherTeams.map(renderTeamCard)
+                ) : myTeams.length === 0 ? (
+                  <View className="py-6 items-center">
+                    <Text className="text-[#888888] text-xs">No teams found matching "{cleanQuery}"</Text>
+                  </View>
+                ) : null}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  // 2. Create Team Modal (Requirement 2 & 22: Real captain, no fake players)
+  const renderCreateTeamModal = () => (
+    <Modal visible={showCreateTeamModal} transparent animationType="fade">
+      <View className="flex-1 bg-black/80 justify-center items-center px-4">
+        <View className="bg-[#121212] border border-[#222222] rounded-2xl p-5 w-full max-w-sm max-h-[90%]">
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
+            <View className="flex-row justify-between items-center mb-2">
+              <Text className="text-white text-lg font-bold">Create New Team</Text>
+              <TouchableOpacity onPress={() => setShowCreateTeamModal(false)} className="p-1">
+                <Feather name="x" size={20} color="#888" />
+              </TouchableOpacity>
+            </View>
+            <Text className="text-[#888888] text-xs mb-4">
+              Build your team with a real roster and invite players
+            </Text>
+
+            <Text className="text-white text-xs font-bold mb-1">Team Name</Text>
+            <TextInput
+              value={newTeamName}
+              onChangeText={(txt) => {
+                setNewTeamName(txt);
+                if (!newTeamShortName || newTeamShortName.length <= 3) {
+                  const words = txt.trim().split(/\s+/);
+                  const suggested =
+                    words.length > 1
+                      ? words.map((w) => w[0]).join('').toUpperCase()
+                      : txt.slice(0, 3).toUpperCase();
+                  setNewTeamShortName(suggested);
+                }
+              }}
+              placeholder="e.g. Royal Strikers"
+              placeholderTextColor="#666"
+              className="bg-[#1a1a1a] border border-[#333] rounded-xl px-4 py-2.5 text-white text-sm mb-3"
+            />
+
+            <Text className="text-white text-xs font-bold mb-1">Short Name / Code</Text>
+            <TextInput
+              value={newTeamShortName}
+              onChangeText={setNewTeamShortName}
+              maxLength={4}
+              placeholder="e.g. RS"
+              placeholderTextColor="#666"
+              className="bg-[#1a1a1a] border border-[#333] rounded-xl px-4 py-2.5 text-white text-sm mb-3"
+            />
+
+            {/* Sport selector (Cricket) */}
+            <View className="flex-row items-center justify-between mb-3 bg-[#181818] border border-[#222] rounded-xl px-3 py-2">
+              <Text className="text-[#888888] text-xs font-semibold">Sport</Text>
+              <View className="flex-row items-center bg-[#23c55e]/15 px-2.5 py-1 rounded-lg border border-[#23c55e]/40">
+                <Text className="text-[#23c55e] text-xs font-bold">🏏 Cricket</Text>
+              </View>
+            </View>
+
+            {/* Team Type selector */}
+            <Text className="text-white text-xs font-bold mb-1.5">Team Type</Text>
+            <View className="flex-row flex-wrap gap-1.5 mb-3">
+              {['Club', 'College', 'Turf', 'Friends', 'Other'].map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  onPress={() => setNewTeamType(type)}
+                  className={`px-3 py-1.5 rounded-lg border mr-1 mb-1 ${
+                    newTeamType === type
+                      ? 'bg-[#23c55e]/20 border-[#23c55e]'
+                      : 'bg-[#1a1a1a] border-[#333]'
+                  }`}
+                >
+                  <Text
+                    className={`text-xs font-semibold ${
+                      newTeamType === type ? 'text-[#23c55e]' : 'text-[#888]'
+                    }`}
+                  >
+                    {type}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text className="text-white text-xs font-bold mb-1">Location / Ground (Optional)</Text>
+            <TextInput
+              value={newTeamLocation}
+              onChangeText={setNewTeamLocation}
+              placeholder="e.g. Hyderabad, India"
+              placeholderTextColor="#666"
+              className="bg-[#1a1a1a] border border-[#333] rounded-xl px-4 py-2.5 text-white text-sm mb-3"
+            />
+
+            <Text className="text-white text-xs font-bold mb-1">Team Logo URL (Optional)</Text>
+            <TextInput
+              value={newTeamLogo}
+              onChangeText={setNewTeamLogo}
+              placeholder="Leave blank for auto-generated logo"
+              placeholderTextColor="#666"
+              className="bg-[#1a1a1a] border border-[#333] rounded-xl px-4 py-2.5 text-white text-sm mb-4"
+            />
+
+            {/* Captain & Squad Section: Creator is automatically Owner + Captain + Squad Member */}
+            <View className="bg-[#181818] border border-[#222222] rounded-xl p-3 mb-5">
+              <Text className="text-[#888888] text-[11px] mb-1">Owner & Captain</Text>
+              <View className="flex-row items-center">
+                <View className="w-2 h-2 rounded-full bg-[#23c55e] mr-2" />
+                <Text className="text-white text-xs font-semibold">
+                  {currentUser?.name || 'Player'} (Owner & Captain) • 1 Member
+                </Text>
+              </View>
+              <Text className="text-[#888888] text-[10px] mt-1">
+                You are automatically added as the Team Owner, Captain, and initial Squad Member.
+              </Text>
+            </View>
+
+            <View className="flex-row justify-end space-x-2">
+              <TouchableOpacity
+                onPress={() => setShowCreateTeamModal(false)}
+                className="px-4 py-2.5 mr-2"
+              >
+                <Text className="text-[#888888] text-sm font-semibold">Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleCreateTeamSubmit}
+                disabled={isCreatingTeam}
+                className="bg-[#23c55e] px-5 py-2.5 rounded-xl items-center"
+              >
+                <Text className="text-black text-sm font-bold">
+                  {isCreatingTeam ? 'Creating...' : 'Create Team'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // 2b. Team Members Screen Modal (Requirement 4, 9, 10: Squad view, readiness banner, member removal)
+  const renderTeamMembersModal = () => {
+    if (!managingSquadTeam) return null;
+    const activeMembers = getActiveMembers(managingSquadTeam);
+    const pendingMembers = getPendingMembers(managingSquadTeam);
+    const isReady = activeMembers.length >= 11;
+    const remaining = 11 - activeMembers.length;
+    const captain =
+      activeMembers.find((m) => m.isCaptain || m.playerId === managingSquadTeam.captainId) ||
+      activeMembers[0];
+
+    return (
+      <Modal visible={!!managingSquadTeam} transparent animationType="slide">
+        <View className="flex-1 bg-black/80 justify-end">
+          <View className="bg-[#121212] border-t border-[#222222] rounded-t-3xl max-h-[90%] p-5">
+            {/* Modal Header */}
+            <View className="flex-row justify-between items-center mb-4">
+              <View className="flex-row items-center flex-1 mr-3">
+                <Image
+                  source={{ uri: managingSquadTeam.logo }}
+                  className="w-10 h-10 rounded-full mr-3 bg-[#1a1a1a]"
+                />
+                <View className="flex-1">
+                  <View className="flex-row items-center">
+                    <Text className="text-white text-lg font-bold mr-2" numberOfLines={1}>
+                      {managingSquadTeam.name}
+                    </Text>
+                    {managingSquadTeam.shortName && (
+                      <View className="bg-[#222] px-1.5 py-0.5 rounded">
+                        <Text className="text-[#888888] text-[10px] font-bold">
+                          {managingSquadTeam.shortName}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text className="text-[#888888] text-xs">
+                    {activeMembers.length} Squad Member{activeMembers.length !== 1 ? 's' : ''}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setManagingSquadTeam(null)}
+                className="w-8 h-8 rounded-full bg-[#1a1a1a] items-center justify-center"
+              >
+                <Feather name="x" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Squad Readiness Banner (Requirement 6 & 9) */}
+            <View
+              className={`p-3.5 rounded-xl border mb-4 ${
+                isReady
+                  ? 'bg-[#1a2e1d]/50 border-[#23c55e]/50'
+                  : 'bg-[#2a2210]/50 border-[#f1c40f]/50'
+              }`}
+            >
+              <View className="flex-row items-center justify-between mb-1">
+                <Text
+                  className={`text-xs font-bold uppercase tracking-wider ${
+                    isReady ? 'text-[#23c55e]' : 'text-[#f1c40f]'
+                  }`}
+                >
+                  {isReady ? 'Squad Ready ✓' : `${activeMembers.length} Members`}
+                </Text>
+                <Text
+                  className={`text-xs font-semibold ${
+                    isReady ? 'text-[#23c55e]' : 'text-[#f1c40f]'
+                  }`}
+                >
+                  {isReady ? `${activeMembers.length} Members` : `Need ${remaining} More`}
+                </Text>
+              </View>
+              <Text className="text-[#cccccc] text-xs">
+                {isReady
+                  ? `11 players required for Playing XI (Squad has ${activeMembers.length} members ✓)`
+                  : `11 players required for Playing XI. Add ${remaining} more player${remaining > 1 ? 's' : ''} to complete your squad.`}
+              </Text>
+            </View>
+
+            {/* + Add Player Button (Requirement 4 & 5) */}
+            <TouchableOpacity
+              onPress={() => {
+                setSearchPlayerUid('');
+                setSearchedPlayer(null);
+                setSearchPlayerError('');
+                setShowAddPlayerModal(true);
+              }}
+              className="flex-row items-center justify-center bg-[#23c55e] py-3 rounded-xl mb-4"
+            >
+              <Feather name="user-plus" size={18} color="#000" style={{ marginRight: 8 }} />
+              <Text className="text-black text-sm font-bold">+ Add Player</Text>
+            </TouchableOpacity>
+
+            <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
+              {/* Captain Section (Requirement 8) */}
+              {captain && (
+                <View className="mb-4">
+                  <Text className="text-[#888888] text-xs font-bold uppercase tracking-wider mb-2">
+                    Captain
+                  </Text>
+                  <View className="flex-row items-center bg-[#181818] border border-[#23c55e]/40 p-3 rounded-xl">
+                    <Image
+                      source={{
+                        uri:
+                          captain.avatar ||
+                          `https://ui-avatars.com/api/?name=${encodeURIComponent(captain.name)}&background=1e3a29&color=23c55e`,
+                      }}
+                      className="w-10 h-10 rounded-full mr-3 bg-[#222]"
+                    />
+                    <View className="flex-1">
+                      <View className="flex-row items-center">
+                        <Text className="text-white text-sm font-bold mr-1.5">{captain.name}</Text>
+                        <View className="bg-[#23c55e]/20 px-1.5 py-0.5 rounded">
+                          <Text className="text-[#23c55e] text-[10px] font-bold">✓ Captain</Text>
+                        </View>
+                      </View>
+                      <Text className="text-[#888888] text-xs mt-0.5">
+                        @{captain.username || 'captain'} • UID: {captain.playerUid || 'N/A'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Accepted Players Section */}
+              <View className="mb-4">
+                <Text className="text-[#888888] text-xs font-bold uppercase tracking-wider mb-2">
+                  Squad Players ({activeMembers.length})
+                </Text>
+                {activeMembers.map((m, idx) => {
+                  const isCap = m.isCaptain || m.playerId === managingSquadTeam.captainId;
+
+                  return (
+                    <View
+                      key={m.playerId || m.id || idx}
+                      className="flex-row items-center justify-between bg-[#181818] border border-[#222222] p-3 rounded-xl mb-2"
+                    >
+                      <View className="flex-row items-center flex-1 mr-2">
+                        <Text className="text-[#888888] text-xs font-bold w-6">{idx + 1}.</Text>
+                        <Image
+                          source={{
+                            uri:
+                              m.avatar ||
+                              `https://ui-avatars.com/api/?name=${encodeURIComponent(m.name)}&background=1e3a29&color=fff`,
+                          }}
+                          className="w-9 h-9 rounded-full mr-2.5 bg-[#222]"
+                        />
+                        <View className="flex-1">
+                          <View className="flex-row items-center">
+                            <Text className="text-white text-xs font-bold mr-1.5">{m.name}</Text>
+                            {isCap && (
+                              <View className="bg-[#23c55e]/20 px-1 py-0.2 rounded">
+                                <Text className="text-[#23c55e] text-[9px] font-bold">CAPTAIN</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text className="text-[#888888] text-[11px] mt-0.5">
+                            {m.role || 'Player'} • UID: {m.playerUid || 'N/A'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {!isCap && (
+                        <TouchableOpacity
+                          onPress={() => handleRemoveMember(m.playerId || m.id)}
+                          className="p-2 rounded-lg bg-[#2a1a1a]"
+                        >
+                          <Feather name="trash-2" size={15} color="#ef4444" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+
+              {/* Pending Invitations Section (Requirement 6) */}
+              {pendingMembers.length > 0 && (
+                <View className="mb-4">
+                  <Text className="text-[#f1c40f] text-xs font-bold uppercase tracking-wider mb-2">
+                    Pending Invitations ({pendingMembers.length})
+                  </Text>
+                  {pendingMembers.map((p, idx) => (
+                    <View
+                      key={p.playerId || p.id || idx}
+                      className="bg-[#181818] border border-[#f1c40f]/30 p-3 rounded-xl mb-2"
+                    >
+                      <View className="flex-row items-center justify-between mb-2">
+                        <View className="flex-row items-center flex-1">
+                          <Image
+                            source={{
+                              uri:
+                                p.avatar ||
+                                `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=2a2210&color=f1c40f`,
+                            }}
+                            className="w-8 h-8 rounded-full mr-2.5 bg-[#222]"
+                          />
+                          <View className="flex-1">
+                            <Text className="text-white text-xs font-bold">{p.name}</Text>
+                            <Text className="text-[#888888] text-[10px]">
+                              UID: {p.playerUid} • Status: Pending
+                            </Text>
+                          </View>
+                        </View>
+                        <View className="bg-[#f1c40f]/20 px-2 py-0.5 rounded">
+                          <Text className="text-[#f1c40f] text-[10px] font-bold">Pending</Text>
+                        </View>
+                      </View>
+
+                      <View className="flex-row justify-end space-x-2">
+                        <TouchableOpacity
+                          onPress={() => handleRejectInvite(p.playerId || p.id)}
+                          className="bg-[#222] px-3 py-1.5 rounded-lg mr-2"
+                        >
+                          <Text className="text-[#888888] text-xs font-semibold">Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => handleAcceptInvite(p.playerId || p.id)}
+                          className="bg-[#23c55e]/20 border border-[#23c55e] px-3 py-1.5 rounded-lg"
+                        >
+                          <Text className="text-[#23c55e] text-xs font-bold">Accept Invite</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Done / Team Ready button */}
+            <TouchableOpacity
+              onPress={() => setManagingSquadTeam(null)}
+              className="bg-[#23c55e] py-3 rounded-xl items-center mt-2"
+            >
+              <Text className="text-black text-sm font-bold">Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  // 2c. Add Player Modal supporting 4 Options (Search UID, Scan QR, Invite, Add Later)
+  const renderAddPlayerModal = () => (
+    <Modal visible={showAddPlayerModal} transparent animationType="fade">
+      <View className="flex-1 bg-black/80 justify-center items-center px-4">
+        <View className="bg-[#121212] border border-[#222222] rounded-2xl p-5 w-full max-w-sm">
+          {/* Header */}
+          <View className="flex-row justify-between items-center mb-1">
+            <Text className="text-white text-lg font-bold">Add Player</Text>
+            <TouchableOpacity onPress={() => setShowAddPlayerModal(false)} className="p-1">
+              <Feather name="x" size={20} color="#888" />
+            </TouchableOpacity>
+          </View>
+          <Text className="text-[#888888] text-xs mb-3">
+            Add team members to your squad using their Player UID
+          </Text>
+
+          {/* Add Player Options Tabs */}
+          <View className="flex-row bg-[#181818] rounded-xl p-1 mb-3.5 border border-[#222]">
+            <TouchableOpacity
+              className="flex-1 py-1.5 rounded-lg bg-[#23c55e]/20 border border-[#23c55e] items-center"
+            >
+              <Text className="text-[#23c55e] text-xs font-bold">Search UID</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={() => Alert.alert('Coming Soon', 'Scan Player QR will be available in an upcoming update.')}
+              className="flex-1 py-1.5 rounded-lg items-center flex-row justify-center"
+            >
+              <Text className="text-[#888888] text-xs font-medium mr-1">Scan QR</Text>
+              <View className="bg-[#333] px-1 py-0.2 rounded">
+                <Text className="text-[#aaa] text-[8px] font-bold">SOON</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => Alert.alert('Coming Soon', 'Invite Player links will be available in an upcoming update.')}
+              className="flex-1 py-1.5 rounded-lg items-center flex-row justify-center"
+            >
+              <Text className="text-[#888888] text-xs font-medium mr-1">Invite</Text>
+              <View className="bg-[#333] px-1 py-0.2 rounded">
+                <Text className="text-[#aaa] text-[8px] font-bold">SOON</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {/* UID Input */}
+          <Text className="text-white text-xs font-bold mb-1">Player UID</Text>
+          <View className="flex-row items-center bg-[#1a1a1a] border border-[#333] rounded-xl px-3 py-1 mb-3">
+            <Feather name="search" size={16} color="#888" style={{ marginRight: 8 }} />
+            <TextInput
+              value={searchPlayerUid}
+              onChangeText={(txt) => {
+                setSearchPlayerUid(txt);
+                setSearchPlayerError('');
+                setSearchedPlayer(null);
+              }}
+              placeholder="e.g. SP-7K4M-92QX"
+              placeholderTextColor="#666"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              className="flex-1 text-white text-sm py-2 font-mono"
+            />
+            {searchPlayerUid.length > 0 && (
+              <TouchableOpacity
+                onPress={() => {
+                  setSearchPlayerUid('');
+                  setSearchedPlayer(null);
+                  setSearchPlayerError('');
+                }}
+              >
+                <Feather name="x-circle" size={16} color="#888" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Search Button */}
+          <TouchableOpacity
+            onPress={handleSearchPlayerByUid}
+            disabled={isSearchingPlayer}
+            className="bg-[#1e2e1e] border border-[#23c55e]/60 py-2.5 rounded-xl items-center mb-3"
+          >
+            <Text className="text-[#23c55e] text-xs font-bold">
+              {isSearchingPlayer ? 'Searching...' : 'Search Player'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Error Message */}
+          {searchPlayerError ? (
+            <View className="bg-[#2a1a1a] border border-[#ef4444]/40 p-3 rounded-xl mb-3">
+              <Text className="text-[#ef4444] text-xs text-center font-semibold">
+                {searchPlayerError}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Confirmation Card */}
+          {searchedPlayer && (
+            <View className="bg-[#181818] border border-[#23c55e] rounded-xl p-3.5 mb-3">
+              <View className="flex-row items-center justify-between mb-2.5 border-b border-[#222222] pb-1.5">
+                <Text className="text-[#23c55e] text-xs font-bold uppercase tracking-wider">
+                  Player Found
+                </Text>
+                <Feather name="check-circle" size={16} color={theme.primary} />
+              </View>
+
+              <View className="flex-row items-center mb-3">
+                <Image
+                  source={{
+                    uri:
+                      searchedPlayer.avatar ||
+                      `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                        searchedPlayer.name
+                      )}&background=1e3a29&color=23c55e`,
+                  }}
+                  className="w-11 h-11 rounded-full mr-3 bg-[#222]"
+                />
+                <View className="flex-1">
+                  <Text className="text-white text-sm font-bold">
+                    {searchedPlayer.name}
+                  </Text>
+                  <Text className="text-[#888888] text-xs">
+                    {searchedPlayer.username?.startsWith('@') ? searchedPlayer.username : `@${searchedPlayer.username}`}
+                  </Text>
+                  <Text className="text-[#23c55e] text-[11px] font-mono mt-0.5">
+                    Player UID: {searchedPlayer.playerUid}
+                  </Text>
+                  {searchedPlayer.role && (
+                    <Text className="text-[#888888] text-[10px] mt-0.5">
+                      {searchedPlayer.role} • {searchedPlayer.style || 'Player'}
+                    </Text>
+                  )}
+                </View>
+              </View>
+
+              <TouchableOpacity
+                onPress={handleAddPlayerToSquad}
+                disabled={isInvitingPlayer}
+                className="bg-[#23c55e] py-2.5 rounded-xl items-center"
+              >
+                <Text className="text-black text-sm font-bold">
+                  {isInvitingPlayer ? 'Adding...' : 'Add Player to Squad'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Add Later button */}
+          <TouchableOpacity
+            onPress={() => {
+              setShowAddPlayerModal(false);
+              setSearchPlayerUid('');
+              setSearchedPlayer(null);
+              setSearchPlayerError('');
+            }}
+            className="py-2.5 items-center rounded-xl bg-[#1a1a1a] border border-[#333] mb-2"
+          >
+            <Text className="text-white text-xs font-semibold">Add Later</Text>
+          </TouchableOpacity>
+
+          {/* Cancel button */}
+          <TouchableOpacity
+            onPress={() => setShowAddPlayerModal(false)}
+            className="py-1.5 items-center"
+          >
+            <Text className="text-[#888888] text-xs font-semibold">Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // 3. Custom Overs Modal
   const renderCustomOversModal = () => (
     <Modal visible={showCustomOversModal} transparent animationType="fade">
       <View className="flex-1 bg-black/75 justify-center items-center px-4">
@@ -1274,10 +2462,7 @@ export default function CreateScreen({ navigation }) {
             >
               <Text className="text-[#888888] text-sm font-semibold">Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleSaveCustomOvers}
-              className="bg-[#23c55e] px-5 py-2 rounded-lg"
-            >
+            <TouchableOpacity onPress={handleSaveCustomOvers} className="bg-[#23c55e] px-5 py-2 rounded-lg">
               <Text className="text-black text-sm font-bold">Save</Text>
             </TouchableOpacity>
           </View>
@@ -1286,28 +2471,26 @@ export default function CreateScreen({ navigation }) {
     </Modal>
   );
 
+  // 4. Edit Field Modal (Venue, Date, Time, Rules)
   const renderEditFieldModal = () => (
     <Modal visible={!!editingField} transparent animationType="fade">
       <View className="flex-1 bg-black/75 justify-center items-center px-4">
         <View className="bg-[#121212] border border-[#222222] rounded-2xl p-5 w-full max-w-sm">
           <Text className="text-white text-lg font-bold mb-1">
-            Edit{' '}
             {editingField === 'venue'
-              ? 'Venue'
+              ? 'Edit Venue'
               : editingField === 'date'
-              ? 'Date'
+              ? 'Edit Date'
               : editingField === 'time'
-              ? 'Time'
-              : editingField === 'teamA'
-              ? 'Team A Name'
-              : editingField === 'teamB'
-              ? 'Team B Name'
-              : 'Match Rules'}
+              ? 'Edit Time'
+              : 'Edit Rules'}
           </Text>
           <TextInput
             value={editValue}
             onChangeText={setEditValue}
-            className="bg-[#1a1a1a] border border-[#333] rounded-xl px-4 py-3 text-white text-sm font-semibold mb-4 mt-2"
+            placeholder="Enter value"
+            placeholderTextColor="#666"
+            className="bg-[#1a1a1a] border border-[#333] rounded-xl px-4 py-3 text-white text-sm mb-4 mt-3"
           />
           <View className="flex-row justify-end">
             <TouchableOpacity onPress={() => setEditingField(null)} className="px-4 py-2 mr-2">
@@ -1319,8 +2502,6 @@ export default function CreateScreen({ navigation }) {
                 else if (editingField === 'date') setMatchDate(editValue);
                 else if (editingField === 'time') setMatchTime(editValue);
                 else if (editingField === 'rules') setMatchRules(editValue);
-                else if (editingField === 'teamA') setTeamA((prev) => ({ ...prev, name: editValue }));
-                else if (editingField === 'teamB') setTeamB((prev) => ({ ...prev, name: editValue }));
                 setEditingField(null);
               }}
               className="bg-[#23c55e] px-5 py-2 rounded-lg"
@@ -1333,17 +2514,19 @@ export default function CreateScreen({ navigation }) {
     </Modal>
   );
 
+  // 5. Player Picker Modal (Striker, Non-striker, Bowler, Keeper)
   const renderPlayerPickerModal = () => {
     if (!pickerConfig) return null;
+
     return (
       <Modal visible={!!pickerConfig} transparent animationType="slide">
         <View className="flex-1 bg-black/75 justify-end">
-          <View className="bg-[#121212] border-t border-[#222222] rounded-t-3xl max-h-[75%] p-5">
-            <View className="flex-row justify-between items-center mb-4 pb-3 border-b border-[#222222]">
+          <View className="bg-[#121212] border-t border-[#222222] rounded-t-3xl max-h-[70%] p-5">
+            <View className="flex-row justify-between items-center mb-4">
               <View>
                 <Text className="text-white text-lg font-bold">{pickerConfig.title}</Text>
                 <Text className="text-[#888888] text-xs">
-                  {pickerConfig.team} Playing XI
+                  {pickerConfig.team} • {pickerConfig.role}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setPickerConfig(null)} className="p-1">
@@ -1354,6 +2537,8 @@ export default function CreateScreen({ navigation }) {
             <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
               {pickerConfig.players.map((p) => {
                 const isSelected = p.id === pickerConfig.currentId;
+                const isMe = currentUser?.playerId && (p.id === currentUser.playerId || p.playerId === currentUser.playerId);
+
                 return (
                   <TouchableOpacity
                     key={p.id}
@@ -1367,16 +2552,29 @@ export default function CreateScreen({ navigation }) {
                         : 'bg-[#181818] border border-[#222222]'
                     }`}
                   >
-                    <Image source={{ uri: p.img }} className="w-9 h-9 rounded-full mr-3" />
+                    <Image
+                      source={{
+                        uri:
+                          p.avatar ||
+                          p.img ||
+                          `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=1e3a29&color=fff`,
+                      }}
+                      className="w-9 h-9 rounded-full mr-3"
+                    />
                     <View className="flex-1">
-                      <Text className="text-white text-sm font-bold">{p.name}</Text>
+                      <View className="flex-row items-center">
+                        <Text className="text-white text-sm font-bold mr-1.5">{p.name}</Text>
+                        {isMe && (
+                          <View className="bg-[#23c55e]/20 border border-[#23c55e] px-1.5 py-0.2 rounded">
+                            <Text className="text-[#23c55e] text-[9px] font-bold">YOU</Text>
+                          </View>
+                        )}
+                      </View>
                       <Text className="text-[#888888] text-xs">
-                        {p.role} • {p.style}
+                        {p.role} • {p.style || p.battingStyle || 'Player'}
                       </Text>
                     </View>
-                    {isSelected && (
-                      <Feather name="check" size={20} color={theme.primary} />
-                    )}
+                    {isSelected && <Feather name="check" size={20} color={theme.primary} />}
                   </TouchableOpacity>
                 );
               })}
@@ -1400,6 +2598,10 @@ export default function CreateScreen({ navigation }) {
 
       {renderCustomOversModal()}
       {renderEditFieldModal()}
+      {renderTeamPickerModal()}
+      {renderCreateTeamModal()}
+      {renderTeamMembersModal()}
+      {renderAddPlayerModal()}
       {renderPlayerPickerModal()}
     </SafeAreaView>
   );

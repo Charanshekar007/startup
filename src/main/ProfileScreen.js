@@ -120,8 +120,6 @@ export default function ProfileScreen({ route }) {
   const experience = Array.isArray(activeProfile?.experience)
     ? activeProfile.experience.join(' • ')
     : (activeProfile?.experience || 'Not specified');
-  const primaryTeam = activeProfile?.primaryTeam || (activeProfile?.teams && activeProfile.teams.length > 0 ? activeProfile.teams[0].name : '');
-  const teams = activeProfile?.teams || [];
   const avatar = effectiveAccount?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1e3a29&color=23c55e`;
   const followers = effectiveAccount?.followers ?? 0;
   const following = effectiveAccount?.following ?? 0;
@@ -148,6 +146,13 @@ export default function ProfileScreen({ route }) {
     tournaments,
     teams: derivedTeams,
   } = playerStats;
+
+  const primaryTeam = activeProfile?.primaryTeam
+    || (activeProfile?.teams && activeProfile.teams.length > 0 ? activeProfile.teams[0].name : '')
+    || (derivedTeams && derivedTeams.length > 0 ? derivedTeams[0].name : '');
+  const teams = (activeProfile?.teams && activeProfile.teams.length > 0)
+    ? activeProfile.teams
+    : (derivedTeams && derivedTeams.length > 0 ? derivedTeams : []);
 
   // Logout handler
   const handleLogout = async () => {
@@ -297,7 +302,16 @@ export default function ProfileScreen({ route }) {
             <Text className="text-white text-xl font-bold">{name}</Text>
             <MaterialCommunityIcons name="check-decagram" size={18} color={theme.primary} style={{ marginLeft: 4 }} />
           </View>
-          <Text className="text-[#888888] text-[13px] mt-0.5 mb-1">{username}</Text>
+          <View className="flex-row items-center flex-wrap mt-0.5 mb-1">
+            <Text className="text-[#888888] text-[13px] mr-2">{username}</Text>
+            {(effectiveAccount?.playerUid || profileData?.playerUid) && (
+              <View className="bg-[#1a1a1a] border border-[#23c55e]/50 px-2 py-0.5 rounded-full">
+                <Text className="text-[#23c55e] text-[10px] font-bold tracking-wider">
+                  UID: {effectiveAccount?.playerUid || profileData?.playerUid}
+                </Text>
+              </View>
+            )}
+          </View>
           
           <View className="flex-row items-center mt-1">
             <Feather name="map-pin" size={12} color={theme.subText} />
