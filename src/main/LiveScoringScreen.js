@@ -14,6 +14,9 @@ import { Feather, MaterialCommunityIcons, Ionicons, FontAwesome5, MaterialIcons 
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useMatches } from '../context/MatchContext';
 import { SQUAD_A, SQUAD_B } from '../data/cricketSquads';
+import { isMatchFollowed, toggleFollowMatch } from '../services/followService';
+import { useAuthStore } from '../store/authStore';
+import { CURRENT_MOCK_USER } from '../data/mockPlayers';
 
 // Strike rate calculation helper
 const getSR = (runs, balls) => {
@@ -48,6 +51,102 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const { activeMatch, updateMatch } = useMatches() || {};
   const matchParam = route?.params?.matchData || route?.params?.match || activeMatch;
   const isFresh = !!matchParam?.isFreshMatch;
+
+  // Retrieve current active user profile
+  const accountData = useAuthStore?.((state) => state.accountData) || null;
+  const currentUserId = accountData?.id || accountData?.userId || CURRENT_MOCK_USER?.playerId || 'usr_arjun123';
+  const currentUserPlayerUid = accountData?.playerUid || CURRENT_MOCK_USER?.playerUid || 'SP-7K4M-92QX';
+
+  // Authorization Evaluation:
+  // 1. Match creator / owner:
+  const isMatchCreator = Boolean(
+    isFresh ||
+    (matchParam?.createdBy && (matchParam.createdBy === currentUserId || matchParam.createdBy === currentUserPlayerUid)) ||
+    (matchParam?.creatorId && (matchParam.creatorId === currentUserId || matchParam.creatorId === currentUserPlayerUid)) ||
+    (matchParam?.ownerId && (matchParam.ownerId === currentUserId || matchParam.ownerId === currentUserPlayerUid))
+  );
+
+  // 2. Explicitly assigned scorer(s):
+  const isAssignedScorer = Boolean(
+    (matchParam?.scorerId && (matchParam.scorerId === currentUserId || matchParam.scorerId === currentUserPlayerUid)) ||
+    (Array.isArray(matchParam?.scorers) && (matchParam.scorers.includes(currentUserId) || (currentUserPlayerUid && matchParam.scorers.includes(currentUserPlayerUid)))) ||
+    matchParam?.rolePillText === 'SCORER' ||
+    route?.params?.isScorer === true
+  );
+
+  const isAuthorizedScorer = Boolean(isMatchCreator || isAssignedScorer);
+
+  // ROUTING PERMISSIONS:
+  // IF current user is authorized scorer -> Scorer Mode (unless explicitly requested as spectator preview)
+  // ELSE -> Strictly Spectator Mode!
+  const defaultToSpectator = !isAuthorizedScorer || Boolean(route?.params?.isSpectator);
+  const [isSpectatorMode, setIsSpectatorModeState] = useState(defaultToSpectator);
+  const [spectatorTab, setSpectatorTab] = useState('SCORE'); // 'SCORE' | 'COMMENTARY' | 'PLAYERS'
+  const [isMatchSavedFollowed, setIsMatchSavedFollowed] = useState(false);
+
+  // Safe mode setter: unauthorized spectators cannot enter scorer mode
+  const setIsSpectatorMode = (val) => {
+    if (!val && !isAuthorizedScorer) {
+      Alert.alert(
+        'Access Restricted',
+        'You are viewing this match in Spectator Mode. Only the match creator or authorized scorer can access the scoring keypad.'
+      );
+      return;
+    }
+    setIsSpectatorModeState(val);
+  };
+
+  // Scoring Mutation Security Guard: Enforce mutation rejection for unauthorized users
+  const assertScorerPermission = () => {
+    if (!isAuthorizedScorer) {
+      Alert.alert(
+        'Scoring Restricted',
+        'You are viewing this match in Spectator Mode. Only the match creator or authorized scorer can modify match scoring.'
+      );
+      return false;
+    }
+    return true;
+  };
+
+  // Live auto-refresh sync effect for spectator mode
+  useEffect(() => {
+    if (!isSpectatorMode || !matchParam?.id) return;
+    const interval = setInterval(() => {
+      if (activeMatch && activeMatch.id === matchParam.id) {
+        if (activeMatch.totalRuns !== undefined && activeMatch.totalRuns !== totalRuns) {
+          setTotalRuns(activeMatch.totalRuns);
+        }
+        if (activeMatch.totalWickets !== undefined && activeMatch.totalWickets !== totalWickets) {
+          setTotalWickets(activeMatch.totalWickets);
+        }
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isSpectatorMode, matchParam?.id, activeMatch, totalRuns, totalWickets]);
+
+  useEffect(() => {
+    if (matchParam?.id) {
+      setIsMatchSavedFollowed(isMatchFollowed(matchParam.id));
+    }
+  }, [matchParam?.id]);
+
+  const handleToggleFollow = async () => {
+    if (!matchParam?.id) return;
+    const nowFollowed = await toggleFollowMatch(matchParam.id);
+    setIsMatchSavedFollowed(nowFollowed);
+  };
+
+  const handleOpenPlayerProfile = (player) => {
+    if (!player) return;
+    const pId = player.userId || player.playerId || player.id;
+    try {
+      navigation.navigate('MainTabs', { screen: 'Profile', params: { userId: pId } });
+    } catch (e) {
+      try {
+        navigation.navigate('Profile', { userId: pId });
+      } catch (err) {}
+    }
+  };
 
   // Match details state
   const teamA = matchParam?.teamA || 'Falcons CC';
@@ -380,6 +479,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   };
 
   const handleUndo = () => {
+    if (!assertScorerPermission()) return;
     if (historyStack.length === 0) {
       Alert.alert('No Undo History', 'You have reached the beginning of this scoring session.');
       return;
@@ -465,6 +565,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     customBowlers,
     customPastOvers
   ) => {
+    if (!assertScorerPermission()) return;
     const summary = {
       battingTeam: firstInningsBattingTeam,
       bowlingTeam: firstInningsBowlingTeam,
@@ -513,6 +614,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   };
 
   const handleMatchTied = (finalRuns, finalWickets, finalOversDecimal) => {
+    if (!assertScorerPermission()) return;
     const inn1 = firstInningsSummary || {
       battingTeam: firstInningsBattingTeam,
       bowlingTeam: firstInningsBowlingTeam,
@@ -557,6 +659,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   };
 
   const handleSuperOverInnings1End = (finalRuns, finalWickets, finalOversDecimal) => {
+    if (!assertScorerPermission()) return;
     const finalLegalBalls = finalOversDecimal === '1.0' ? 6 : (parseInt(String(finalOversDecimal).split('.')[1], 10) || legalBalls);
     const summary = {
       battingTeam: superOverBattingTeam,
@@ -605,6 +708,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   };
 
   const handleSuperOverInnings2End = (finalRuns, finalWickets, finalOversDecimal, isTargetReached) => {
+    if (!assertScorerPermission()) return;
     const inn1 = superOverInnings1Summary;
     const finalLegalBalls = finalOversDecimal === '1.0' ? 6 : (parseInt(String(finalOversDecimal).split('.')[1], 10) || legalBalls);
     const inn2 = {
@@ -744,6 +848,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     customBowlers,
     customPastOvers,
   }) => {
+    if (!assertScorerPermission()) return;
     const inn1 = firstInningsSummary || {
       battingTeam: firstInningsBattingTeam,
       bowlingTeam: firstInningsBowlingTeam,
@@ -866,6 +971,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   };
 
   const handleEndMatchAsDraw = () => {
+    if (!assertScorerPermission()) return;
     if (isProcessingAction) return;
     Alert.alert(
       'End Match as Draw?',
@@ -1066,6 +1172,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   };
 
   const handleConfirmNextBowler = () => {
+    if (!assertScorerPermission()) return;
     if (!selectedNextBowler) return;
 
     if (selectedNextBowler.id === previousBowlerId) {
@@ -1098,6 +1205,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   // NORMAL DELIVERY (0, 1, 2, 3, 4, 6)
   // -----------------------------------------------------------------------
   const handleScoreRuns = (runs) => {
+    if (!assertScorerPermission()) return;
     if (isScoringLocked) {
       Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
       return;
@@ -1217,6 +1325,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   // NO BALL HANDLERS
   // -----------------------------------------------------------------------
   const handleScoreNoBallRuns = (offBatRuns) => {
+    if (!assertScorerPermission()) return;
     if (isScoringLocked) {
       Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
       return;
@@ -1310,6 +1419,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   };
 
   const handleScoreNoBallByes = (byeRuns) => {
+    if (!assertScorerPermission()) return;
     if (isScoringLocked) {
       Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
       return;
@@ -1386,6 +1496,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   };
 
   const handleScoreNoBallLegByes = (legByeRuns) => {
+    if (!assertScorerPermission()) return;
     if (isScoringLocked) {
       Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
       return;
@@ -1462,6 +1573,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   };
 
   const handleScoreNoBallWicket = () => {
+    if (!assertScorerPermission()) return;
     if (isScoringLocked) {
       Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
       return;
@@ -1602,6 +1714,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   // WIDE HANDLER
   // -----------------------------------------------------------------------
   const handleScoreWide = (extraRuns = 0) => {
+    if (!assertScorerPermission()) return;
     if (isScoringLocked) {
       Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
       return;
@@ -1667,6 +1780,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   // BYE HANDLER
   // -----------------------------------------------------------------------
   const handleScoreBye = (byeRuns) => {
+    if (!assertScorerPermission()) return;
     if (isScoringLocked) {
       Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
       return;
@@ -1779,6 +1893,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   // LEG BYE HANDLER
   // -----------------------------------------------------------------------
   const handleScoreLegBye = (legByeRuns) => {
+    if (!assertScorerPermission()) return;
     if (isScoringLocked) {
       Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
       return;
@@ -1891,6 +2006,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   // WICKET WORKFLOW
   // -----------------------------------------------------------------------
   const handleConfirmWicket = () => {
+    if (!assertScorerPermission()) return;
     if (isScoringLocked) {
       Alert.alert('Innings Completed', 'The innings has concluded. Use Undo to modify previous deliveries.');
       return;
@@ -2115,7 +2231,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       <View className="flex-row items-center justify-between px-4 py-3 border-b border-[#1f1f1f]">
         <TouchableOpacity
           onPress={() => {
-            if (isScoringLocked && historyStack.length > 0) {
+            if (!isSpectatorMode && isScoringLocked && historyStack.length > 0) {
               handleUndo();
             } else {
               navigation.goBack();
@@ -2126,9 +2242,20 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           <Feather name="arrow-left" size={22} color="#ffffff" />
         </TouchableOpacity>
         <View className="items-center">
-          <Text className="text-white text-base font-bold">
-            {isSuperOver ? `SUPER OVER ${superOverNumber > 1 ? `#${superOverNumber}` : ''}` : 'Live Scoring'}
-          </Text>
+          <View className="flex-row items-center">
+            {isSpectatorMode && (
+              <View className="bg-[#23c55e] px-1.5 py-0.5 rounded mr-1.5">
+                <Text className="text-black text-[9px] font-black">LIVE</Text>
+              </View>
+            )}
+            <Text className="text-white text-base font-bold">
+              {isSpectatorMode
+                ? 'Live Match Center'
+                : isSuperOver
+                ? `SUPER OVER ${superOverNumber > 1 ? `#${superOverNumber}` : ''}`
+                : 'Live Scoring'}
+            </Text>
+          </View>
           <Text className="text-[#23c55e] text-[10px] font-bold">
             {isSuperOver
               ? `Innings ${superOverInnings} of 2`
@@ -2137,12 +2264,21 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
               : '2nd Innings (Chase)'}
           </Text>
         </View>
-        <TouchableOpacity onPress={() => setShowSettingsModal(true)} className="p-1">
-          <Feather name="settings" size={20} color="#ffffff" />
-        </TouchableOpacity>
+        <View className="flex-row items-center">
+          <TouchableOpacity onPress={handleToggleFollow} className="p-1 mr-2">
+            <MaterialCommunityIcons
+              name={isMatchSavedFollowed ? 'star' : 'star-outline'}
+              size={22}
+              color={isMatchSavedFollowed ? '#eab308' : '#888888'}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowSettingsModal(true)} className="p-1">
+            <Feather name="settings" size={20} color="#ffffff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 390 + bottomInset }}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: (isSpectatorMode ? 90 : 390) + bottomInset }}>
         {/* Match Header / Scoreboard Card */}
         <View className="bg-[#121212] rounded-2xl border border-[#222222] p-4 mb-3">
           <View className="flex-row items-center justify-between">
@@ -2223,143 +2359,301 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           </View>
         </View>
 
-        {/* Current Batters Table */}
-        <View className="bg-[#121212] rounded-2xl border border-[#222222] p-3.5 mb-3">
-          <View className="flex-row items-center justify-between mb-2.5 border-b border-[#222222] pb-2">
-            <Text className="text-[#888888] text-[10px] font-bold tracking-wider">CURRENT BATTERS</Text>
-            <View className="flex-row w-[120px] justify-between">
-              <Text className="text-[#888888] text-[10px] font-bold w-9 text-right">R</Text>
-              <Text className="text-[#888888] text-[10px] font-bold w-9 text-right">B</Text>
-              <Text className="text-[#888888] text-[10px] font-bold w-12 text-right">SR</Text>
-            </View>
+        {/* Spectator Navigation Tabs (SCORE | COMMENTARY | PLAYERS) */}
+        {isSpectatorMode && (
+          <View className="flex-row bg-[#141414] border border-[#222222] rounded-xl p-1 mb-3">
+            {['SCORE', 'COMMENTARY', 'PLAYERS'].map((tab) => (
+              <TouchableOpacity
+                key={tab}
+                onPress={() => setSpectatorTab(tab)}
+                className={`flex-1 py-2 rounded-lg items-center ${
+                  spectatorTab === tab ? 'bg-[#23c55e]' : 'bg-transparent'
+                }`}
+              >
+                <Text
+                  className={`text-xs font-bold tracking-wider ${
+                    spectatorTab === tab ? 'text-black' : 'text-[#888888]'
+                  }`}
+                >
+                  {tab}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
+        )}
 
-          {/* Striker Row */}
-          <View className="flex-row items-center justify-between py-1.5">
-            <View className="flex-row items-center flex-1 pr-2">
-              <Image source={{ uri: striker.img }} className="w-6 h-6 rounded-full mr-2.5 bg-[#222222]" />
-              <Text className="text-white text-[13px] font-bold flex-1" numberOfLines={1}>
-                {striker.name} <Text className="text-[#23c55e] font-extrabold">*</Text>
-              </Text>
-            </View>
-            <View className="flex-row w-[120px] justify-between items-center">
-              <Text className="text-white text-[13px] font-bold w-9 text-right">{striker.runs}</Text>
-              <Text className="text-[#888888] text-[13px] w-9 text-right">{striker.balls}</Text>
-              <Text className="text-[#888888] text-[13px] w-12 text-right">
-                {getSR(striker.runs, striker.balls)}
-              </Text>
-            </View>
-          </View>
-
-          {/* Non-Striker Row */}
-          <View className="flex-row items-center justify-between py-1.5 border-t border-[#1a1a1a]">
-            <View className="flex-row items-center flex-1 pr-2">
-              <Image source={{ uri: nonStriker.img }} className="w-6 h-6 rounded-full mr-2.5 bg-[#222222]" />
-              <Text className="text-[#cccccc] text-[13px] font-medium flex-1" numberOfLines={1}>
-                {nonStriker.name}
-              </Text>
-            </View>
-            <View className="flex-row w-[120px] justify-between items-center">
-              <Text className="text-white text-[13px] font-bold w-9 text-right">{nonStriker.runs}</Text>
-              <Text className="text-[#888888] text-[13px] w-9 text-right">{nonStriker.balls}</Text>
-              <Text className="text-[#888888] text-[13px] w-12 text-right">
-                {getSR(nonStriker.runs, nonStriker.balls)}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Current Bowler Card */}
-        <View className="bg-[#121212] rounded-2xl border border-[#222222] p-3.5 mb-3">
-          <Text className="text-[#888888] text-[10px] font-bold tracking-wider mb-2">CURRENT BOWLER</Text>
-          <View className="flex-row items-center justify-between mb-2">
-            <View className="flex-row items-center flex-1">
-              <Image source={{ uri: bowler.img }} className="w-6 h-6 rounded-full mr-2.5 bg-[#222222]" />
-              <Text className="text-white text-[13px] font-bold">{bowler.name}</Text>
-            </View>
-            <Text className="text-white text-[13px] font-bold">
-              {bowler.overs || oversDecimal} - {bowler.maidens} - {bowler.runsConceded} - {bowler.wickets}
-            </Text>
-          </View>
-          <View className="flex-row justify-between border-t border-[#1a1a1a] pt-2">
-            <Text className="text-[#888888] text-[11px]">
-              Econ: {getEconomy(bowler.runsConceded, bowler.overs || oversDecimal)}
-            </Text>
-            <Text className="text-[#888888] text-[11px]">
-              Max: {isSuperOver ? '1 over limit' : `${Math.ceil(totalOversMax / 5)} overs limit`}
-            </Text>
-          </View>
-          {wicketkeeper?.name && (
-            <View className="flex-row items-center justify-between border-t border-[#1a1a1a] pt-2 mt-2">
-              <View className="flex-row items-center">
-                <Ionicons name="hand-left-outline" size={13} color="#888888" style={{ marginRight: 6 }} />
-                <Text className="text-[#888888] text-[11px]">Wicketkeeper:</Text>
+        {/* --- TAB 1: SCORECARD VIEW --- */}
+        {(!isSpectatorMode || spectatorTab === 'SCORE') && (
+          <>
+            {/* Current Batters Table */}
+            <View className="bg-[#121212] rounded-2xl border border-[#222222] p-3.5 mb-3">
+              <View className="flex-row items-center justify-between mb-2.5 border-b border-[#222222] pb-2">
+                <Text className="text-[#888888] text-[10px] font-bold tracking-wider">CURRENT BATTERS</Text>
+                <View className="flex-row w-[120px] justify-between">
+                  <Text className="text-[#888888] text-[10px] font-bold w-9 text-right">R</Text>
+                  <Text className="text-[#888888] text-[10px] font-bold w-9 text-right">B</Text>
+                  <Text className="text-[#888888] text-[10px] font-bold w-12 text-right">SR</Text>
+                </View>
               </View>
-              <Text className="text-white text-[11px] font-semibold">{wicketkeeper.name}</Text>
-            </View>
-          )}
-        </View>
 
-        {/* This Over Deliveries Bar */}
-        <View className="bg-[#121212] rounded-2xl border border-[#222222] p-3 mb-3">
-          <View className="flex-row justify-between items-center mb-2">
-            <TouchableOpacity
-              onPress={() => setCurrentScreen('BALL_FEED')}
-              className="flex-row items-center"
-            >
-              <Text className="text-[#888888] text-[11px] font-bold tracking-wider mr-1">
-                THIS OVER
-              </Text>
-              <Feather name="chevron-right" size={13} color="#888888" />
-            </TouchableOpacity>
-            <Text className="text-[#888888] text-xs font-bold">
-              {currentOverNumber}
-            </Text>
-          </View>
-          <View className="flex-row items-center">
-            {currentOverBalls.length === 0 ? (
-              <Text className="text-[#666666] text-xs italic py-1">New over ready to begin</Text>
-            ) : (
-              currentOverBalls.map((b, i) => {
-                let badgeBg = 'bg-[#181818]';
-                let badgeBorder = 'border-[#2a2a2a]';
-                let textColor = 'text-white';
-                if (b.type === 'wicket') {
-                  badgeBg = 'bg-[#2a1315]';
-                  badgeBorder = 'border-[#ef4444]';
-                  textColor = 'text-[#ef4444]';
-                } else if (b.type === 'no-ball') {
-                  badgeBg = 'bg-[#2a1d0f]';
-                  badgeBorder = 'border-[#f59e0b]';
-                  textColor = 'text-[#fbbf24]';
-                } else if (b.type === 'wide') {
-                  badgeBg = 'bg-[#101c33]';
-                  badgeBorder = 'border-[#3b82f6]';
-                  textColor = 'text-[#60a5fa]';
-                } else if (b.type === 'bye' || b.type === 'leg-bye') {
-                  badgeBg = 'bg-[#1f1633]';
-                  badgeBorder = 'border-[#8b5cf6]';
-                  textColor = 'text-[#c084fc]';
-                } else if (b.value === '4' || b.value === '6') {
-                  badgeBg = 'bg-[#0f2316]';
-                  badgeBorder = 'border-[#22c55e]';
-                  textColor = 'text-[#22c55e]';
-                }
-                return (
-                  <View
-                    key={i}
-                    className={`w-8 h-8 rounded-full ${badgeBg} items-center justify-center mr-2 border ${badgeBorder}`}
-                  >
-                    <Text className={`text-xs font-bold ${textColor}`}>{b.value}</Text>
+              {/* Striker Row */}
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => handleOpenPlayerProfile(striker)}
+                className="flex-row items-center justify-between py-1.5"
+              >
+                <View className="flex-row items-center flex-1 pr-2">
+                  <Image source={{ uri: striker.img }} className="w-6 h-6 rounded-full mr-2.5 bg-[#222222]" />
+                  <Text className="text-white text-[13px] font-bold flex-1" numberOfLines={1}>
+                    {striker.name} <Text className="text-[#23c55e] font-extrabold">*</Text>
+                  </Text>
+                </View>
+                <View className="flex-row w-[120px] justify-between items-center">
+                  <Text className="text-white text-[13px] font-bold w-9 text-right">{striker.runs}</Text>
+                  <Text className="text-[#888888] text-[13px] w-9 text-right">{striker.balls}</Text>
+                  <Text className="text-[#888888] text-[13px] w-12 text-right">
+                    {getSR(striker.runs, striker.balls)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Non-Striker Row */}
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => handleOpenPlayerProfile(nonStriker)}
+                className="flex-row items-center justify-between py-1.5 border-t border-[#1a1a1a]"
+              >
+                <View className="flex-row items-center flex-1 pr-2">
+                  <Image source={{ uri: nonStriker.img }} className="w-6 h-6 rounded-full mr-2.5 bg-[#222222]" />
+                  <Text className="text-[#cccccc] text-[13px] font-medium flex-1" numberOfLines={1}>
+                    {nonStriker.name}
+                  </Text>
+                </View>
+                <View className="flex-row w-[120px] justify-between items-center">
+                  <Text className="text-white text-[13px] font-bold w-9 text-right">{nonStriker.runs}</Text>
+                  <Text className="text-[#888888] text-[13px] w-9 text-right">{nonStriker.balls}</Text>
+                  <Text className="text-[#888888] text-[13px] w-12 text-right">
+                    {getSR(nonStriker.runs, nonStriker.balls)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* Current Bowler Card */}
+            <View className="bg-[#121212] rounded-2xl border border-[#222222] p-3.5 mb-3">
+              <Text className="text-[#888888] text-[10px] font-bold tracking-wider mb-2">CURRENT BOWLER</Text>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => handleOpenPlayerProfile(bowler)}
+                className="flex-row items-center justify-between mb-2"
+              >
+                <View className="flex-row items-center flex-1">
+                  <Image source={{ uri: bowler.img }} className="w-6 h-6 rounded-full mr-2.5 bg-[#222222]" />
+                  <Text className="text-white text-[13px] font-bold">{bowler.name}</Text>
+                </View>
+                <Text className="text-white text-[13px] font-bold">
+                  {bowler.overs || oversDecimal} - {bowler.maidens} - {bowler.runsConceded} - {bowler.wickets}
+                </Text>
+              </TouchableOpacity>
+              <View className="flex-row justify-between border-t border-[#1a1a1a] pt-2">
+                <Text className="text-[#888888] text-[11px]">
+                  Econ: {getEconomy(bowler.runsConceded, bowler.overs || oversDecimal)}
+                </Text>
+                <Text className="text-[#888888] text-[11px]">
+                  Max: {isSuperOver ? '1 over limit' : `${Math.ceil(totalOversMax / 5)} overs limit`}
+                </Text>
+              </View>
+              {wicketkeeper?.name && (
+                <View className="flex-row items-center justify-between border-t border-[#1a1a1a] pt-2 mt-2">
+                  <View className="flex-row items-center">
+                    <Ionicons name="hand-left-outline" size={13} color="#888888" style={{ marginRight: 6 }} />
+                    <Text className="text-[#888888] text-[11px]">Wicketkeeper:</Text>
                   </View>
-                );
-              })
+                  <Text className="text-white text-[11px] font-semibold">{wicketkeeper.name}</Text>
+                </View>
+              )}
+            </View>
+
+            {/* This Over Deliveries Bar */}
+            <View className="bg-[#121212] rounded-2xl border border-[#222222] p-3 mb-3">
+              <View className="flex-row justify-between items-center mb-2">
+                <TouchableOpacity
+                  onPress={() => setCurrentScreen('BALL_FEED')}
+                  className="flex-row items-center"
+                >
+                  <Text className="text-[#888888] text-[11px] font-bold tracking-wider mr-1">
+                    THIS OVER
+                  </Text>
+                  <Feather name="chevron-right" size={13} color="#888888" />
+                </TouchableOpacity>
+                <Text className="text-[#888888] text-xs font-bold">
+                  {currentOverNumber}
+                </Text>
+              </View>
+              <View className="flex-row items-center">
+                {currentOverBalls.length === 0 ? (
+                  <Text className="text-[#666666] text-xs italic py-1">New over ready to begin</Text>
+                ) : (
+                  currentOverBalls.map((b, i) => {
+                    let badgeBg = 'bg-[#181818]';
+                    let badgeBorder = 'border-[#2a2a2a]';
+                    let textColor = 'text-white';
+                    if (b.type === 'wicket') {
+                      badgeBg = 'bg-[#2a1315]';
+                      badgeBorder = 'border-[#ef4444]';
+                      textColor = 'text-[#ef4444]';
+                    } else if (b.type === 'no-ball') {
+                      badgeBg = 'bg-[#2a1d0f]';
+                      badgeBorder = 'border-[#f59e0b]';
+                      textColor = 'text-[#fbbf24]';
+                    } else if (b.type === 'wide') {
+                      badgeBg = 'bg-[#101c33]';
+                      badgeBorder = 'border-[#3b82f6]';
+                      textColor = 'text-[#60a5fa]';
+                    } else if (b.type === 'bye' || b.type === 'leg-bye') {
+                      badgeBg = 'bg-[#1f1633]';
+                      badgeBorder = 'border-[#8b5cf6]';
+                      textColor = 'text-[#c084fc]';
+                    } else if (b.value === '4' || b.value === '6') {
+                      badgeBg = 'bg-[#0f2316]';
+                      badgeBorder = 'border-[#22c55e]';
+                      textColor = 'text-[#22c55e]';
+                    }
+                    return (
+                      <View
+                        key={i}
+                        className={`w-8 h-8 rounded-full ${badgeBg} items-center justify-center mr-2 border ${badgeBorder}`}
+                      >
+                        <Text className={`text-xs font-bold ${textColor}`}>{b.value}</Text>
+                      </View>
+                    );
+                  })
+                )}
+              </View>
+            </View>
+          </>
+        )}
+
+        {/* --- TAB 2: COMMENTARY VIEW --- */}
+        {isSpectatorMode && spectatorTab === 'COMMENTARY' && (
+          <View className="mb-4">
+            <Text className="text-white text-xs font-bold tracking-wider uppercase mb-3">
+              Ball-by-Ball Live Commentary
+            </Text>
+            {commentaryList.length === 0 ? (
+              <View className="bg-[#121212] rounded-xl border border-[#222222] p-4 items-center">
+                <Text className="text-[#888888] text-xs">No commentary available for this innings yet.</Text>
+              </View>
+            ) : (
+              commentaryList.map((c) => (
+                <View key={c.id} className="bg-[#121212] rounded-xl border border-[#222222] p-3 mb-2.5">
+                  <View className="flex-row justify-between items-center mb-1">
+                    <Text className="text-[#23c55e] text-xs font-bold">Over {c.over}</Text>
+                    <View className="bg-[#1e1e1e] px-2 py-0.5 rounded">
+                      <Text className="text-[#888888] text-[10px] font-bold">MOMENT</Text>
+                    </View>
+                  </View>
+                  <Text className="text-[#cccccc] text-xs leading-5">{c.text}</Text>
+                </View>
+              ))
             )}
           </View>
-        </View>
+        )}
+
+        {/* --- TAB 3: PLAYERS VIEW --- */}
+        {isSpectatorMode && spectatorTab === 'PLAYERS' && (
+          <View className="mb-4">
+            <Text className="text-white text-xs font-bold tracking-wider uppercase mb-2">
+              Current Key Players
+            </Text>
+            <View className="bg-[#121212] rounded-xl border border-[#222222] p-3 mb-4">
+              <TouchableOpacity
+                onPress={() => handleOpenPlayerProfile(striker)}
+                className="flex-row items-center justify-between py-2 border-b border-[#1c1c1c]"
+              >
+                <View className="flex-row items-center flex-1">
+                  <Image source={{ uri: striker.img }} className="w-8 h-8 rounded-full mr-2.5 bg-[#222]" />
+                  <View>
+                    <Text className="text-white text-xs font-bold">{striker.name} (Striker)</Text>
+                    <Text className="text-[#888888] text-[10px]">{striker.role || 'Batter'}</Text>
+                  </View>
+                </View>
+                <View className="flex-row items-center">
+                  <Text className="text-[#23c55e] text-xs mr-1 font-bold">Profile</Text>
+                  <Feather name="chevron-right" size={13} color="#23c55e" />
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => handleOpenPlayerProfile(nonStriker)}
+                className="flex-row items-center justify-between py-2 border-b border-[#1c1c1c]"
+              >
+                <View className="flex-row items-center flex-1">
+                  <Image source={{ uri: nonStriker.img }} className="w-8 h-8 rounded-full mr-2.5 bg-[#222]" />
+                  <View>
+                    <Text className="text-white text-xs font-bold">{nonStriker.name} (Non-Striker)</Text>
+                    <Text className="text-[#888888] text-[10px]">{nonStriker.role || 'Batter'}</Text>
+                  </View>
+                </View>
+                <View className="flex-row items-center">
+                  <Text className="text-[#23c55e] text-xs mr-1 font-bold">Profile</Text>
+                  <Feather name="chevron-right" size={13} color="#23c55e" />
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => handleOpenPlayerProfile(bowler)}
+                className="flex-row items-center justify-between py-2"
+              >
+                <View className="flex-row items-center flex-1">
+                  <Image source={{ uri: bowler.img }} className="w-8 h-8 rounded-full mr-2.5 bg-[#222]" />
+                  <View>
+                    <Text className="text-white text-xs font-bold">{bowler.name} (Bowler)</Text>
+                    <Text className="text-[#888888] text-[10px]">{bowler.role || 'Bowler'}</Text>
+                  </View>
+                </View>
+                <View className="flex-row items-center">
+                  <Text className="text-[#23c55e] text-xs mr-1 font-bold">Profile</Text>
+                  <Feather name="chevron-right" size={13} color="#23c55e" />
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <Text className="text-white text-xs font-bold tracking-wider uppercase mb-2">
+              Playing Squads
+            </Text>
+            <View className="bg-[#121212] rounded-xl border border-[#222222] p-3 mb-3">
+              <Text className="text-[#23c55e] text-xs font-bold mb-2">{teamA} Squad</Text>
+              {playingXI_A.map((p, idx) => (
+                <TouchableOpacity
+                  key={p.id || idx}
+                  onPress={() => handleOpenPlayerProfile(p)}
+                  className="flex-row justify-between items-center py-1.5 border-b border-[#181818]"
+                >
+                  <Text className="text-white text-xs">{p.name || `Player ${idx + 1}`}</Text>
+                  <Text className="text-[#888888] text-[10px]">{p.role || 'Player'}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View className="bg-[#121212] rounded-xl border border-[#222222] p-3">
+              <Text className="text-[#ef4444] text-xs font-bold mb-2">{teamB} Squad</Text>
+              {playingXI_B.map((p, idx) => (
+                <TouchableOpacity
+                  key={p.id || idx}
+                  onPress={() => handleOpenPlayerProfile(p)}
+                  className="flex-row justify-between items-center py-1.5 border-b border-[#181818]"
+                >
+                  <Text className="text-white text-xs">{p.name || `Player ${idx + 1}`}</Text>
+                  <Text className="text-[#888888] text-[10px]">{p.role || 'Player'}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
       </ScrollView>
 
-      {/* Floating Bottom Scoring Keypad */}
+      {/* Floating Bottom Scoring Keypad or Spectator Bar */}
       {isScoringLocked ? (
         <View
           style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
@@ -2384,13 +2678,15 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           </View>
 
           <View className="flex-row mb-1">
-            <TouchableOpacity
-              onPress={handleUndo}
-              className="flex-1 py-3.5 mx-1 rounded-xl bg-[#1e1e1e] border border-[#333333] flex-row items-center justify-center active:bg-[#2a2a2a]"
-            >
-              <Ionicons name="arrow-undo-outline" size={16} color="#ffffff" />
-              <Text className="text-white text-xs font-bold tracking-wider ml-2">UNDO LAST BALL</Text>
-            </TouchableOpacity>
+            {!isSpectatorMode && isAuthorizedScorer && (
+              <TouchableOpacity
+                onPress={handleUndo}
+                className="flex-1 py-3.5 mx-1 rounded-xl bg-[#1e1e1e] border border-[#333333] flex-row items-center justify-center active:bg-[#2a2a2a]"
+              >
+                <Ionicons name="arrow-undo-outline" size={16} color="#ffffff" />
+                <Text className="text-white text-xs font-bold tracking-wider ml-2">UNDO LAST BALL</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               onPress={() => {
@@ -2412,11 +2708,53 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
             </TouchableOpacity>
           </View>
         </View>
+      ) : isSpectatorMode ? (
+        <View
+          style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
+          className="absolute bottom-0 left-0 right-0 bg-[#0a0a0a]/95 border-t border-[#1f1f1f] px-4 py-3.5 flex-row items-center justify-between"
+        >
+          <View className="flex-row items-center">
+            <View className="w-2.5 h-2.5 rounded-full bg-[#23c55e] mr-2" />
+            <Text className="text-white text-xs font-black tracking-wider uppercase">
+              SPECTATOR MODE • LIVE
+            </Text>
+          </View>
+          {isAuthorizedScorer ? (
+            <TouchableOpacity
+              onPress={() => setIsSpectatorMode(false)}
+              className="border border-[#23c55e]/50 px-3 py-1.5 rounded-lg bg-[#142318] flex-row items-center"
+            >
+              <MaterialCommunityIcons name="pencil" size={12} color="#23c55e" style={{ marginRight: 4 }} />
+              <Text className="text-[#23c55e] text-[11px] font-bold">Scorer Mode</Text>
+            </TouchableOpacity>
+          ) : (
+            <View className="flex-row items-center">
+              <Text className="text-[#888888] text-[11px] font-medium mr-1.5">Auto-refreshing</Text>
+              <Ionicons name="radio-outline" size={13} color="#23c55e" />
+            </View>
+          )}
+        </View>
       ) : (
         <View
           style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
           className="absolute bottom-0 left-0 right-0 bg-[#0a0a0a] border-t border-[#1f1f1f] px-3 pt-2.5"
         >
+          {/* Scorer Mode Status Header */}
+          <View className="flex-row items-center justify-between px-2 mb-2 pb-1.5 border-b border-[#1f1f1f]">
+            <View className="flex-row items-center">
+              <View className="w-2.5 h-2.5 rounded-full bg-[#23c55e] mr-2" />
+              <Text className="text-[#23c55e] text-[11px] font-black tracking-wider uppercase">
+                SCORER MODE • LIVE
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setIsSpectatorMode(true)}
+              className="flex-row items-center bg-[#141414] px-2 py-0.5 rounded border border-[#2a2a2a]"
+            >
+              <Ionicons name="eye-outline" size={12} color="#888888" style={{ marginRight: 4 }} />
+              <Text className="text-[#888888] text-[10px] font-semibold">View as Spectator</Text>
+            </TouchableOpacity>
+          </View>
           {/* Row 1: Runs 0, 1, 2 */}
           <View className="flex-row mb-2">
             <TouchableOpacity
@@ -4398,31 +4736,44 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
               <Feather name="x" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            onPress={() => {
-              setShowSettingsModal(false);
-              setCurrentScreen('END_INNINGS_REASON');
-            }}
-            className="p-4 bg-[#181818] rounded-xl mb-3 flex-row justify-between items-center"
-          >
-            <Text className="text-white text-sm font-bold">Declare / Conclude Innings</Text>
-            <Feather name="chevron-right" size={16} color="#888" />
-          </TouchableOpacity>
-          {!isSuperOver && (
-            <TouchableOpacity
-              onPress={() => {
-                setShowSettingsModal(false);
-                const tiedRuns = firstInningsSummary?.totalRuns || 150;
-                handleMatchTied(tiedRuns, totalWickets, `${totalOversMax}.0`);
-              }}
-              className="p-4 bg-[#1a180e] border border-[#eab308]/40 rounded-xl mb-3 flex-row justify-between items-center"
-            >
-              <View className="flex-1 mr-2">
-                <Text className="text-[#eab308] text-sm font-bold">Simulate Match Tied (Super Over)</Text>
-                <Text className="text-[#888888] text-xs mt-0.5">Quickly jump to Super Over flow</Text>
-              </View>
-              <Ionicons name="flash" size={16} color="#eab308" />
-            </TouchableOpacity>
+          {isAuthorizedScorer && (
+            <>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowSettingsModal(false);
+                  setCurrentScreen('END_INNINGS_REASON');
+                }}
+                className="p-4 bg-[#181818] rounded-xl mb-3 flex-row justify-between items-center"
+              >
+                <Text className="text-white text-sm font-bold">Declare / Conclude Innings</Text>
+                <Feather name="chevron-right" size={16} color="#888" />
+              </TouchableOpacity>
+              {!isSuperOver && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowSettingsModal(false);
+                    const tiedRuns = firstInningsSummary?.totalRuns || 150;
+                    handleMatchTied(tiedRuns, totalWickets, `${totalOversMax}.0`);
+                  }}
+                  className="p-4 bg-[#1a180e] border border-[#eab308]/40 rounded-xl mb-3 flex-row justify-between items-center"
+                >
+                  <View className="flex-1 mr-2">
+                    <Text className="text-[#eab308] text-sm font-bold">Simulate Match Tied (Super Over)</Text>
+                    <Text className="text-[#888888] text-xs mt-0.5">Quickly jump to Super Over flow</Text>
+                  </View>
+                  <Ionicons name="flash" size={16} color="#eab308" />
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+
+          {!isAuthorizedScorer && (
+            <View className="bg-[#181818] rounded-xl p-4 mb-3 border border-[#222222]">
+              <Text className="text-white text-xs font-bold uppercase tracking-wider mb-2">Match Information</Text>
+              <Text className="text-[#cccccc] text-xs mb-1">Venue: {matchParam?.venue || 'Local Stadium'}</Text>
+              <Text className="text-[#cccccc] text-xs mb-1">Format: {matchParam?.format || 'T20'} • {totalOversMax} Overs</Text>
+              <Text className="text-[#23c55e] text-xs font-semibold mt-1">🟢 Spectator Mode • Auto-updating</Text>
+            </View>
           )}
           <TouchableOpacity
             onPress={() => {

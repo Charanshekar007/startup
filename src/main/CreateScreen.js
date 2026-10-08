@@ -556,6 +556,11 @@ export default function CreateScreen({ navigation }) {
 
     const newMatchData = {
       id: `match_${Date.now()}`,
+      createdBy: CURRENT_MOCK_USER?.playerId || 'usr_arjun123',
+      creatorId: CURRENT_MOCK_USER?.playerId || 'usr_arjun123',
+      ownerId: CURRENT_MOCK_USER?.playerId || 'usr_arjun123',
+      scorerId: CURRENT_MOCK_USER?.playerId || 'usr_arjun123',
+      scorers: [CURRENT_MOCK_USER?.playerId || 'usr_arjun123', CURRENT_MOCK_USER?.playerUid || 'SP-7K4M-92QX', 'usr_arjun123'],
       teamA: teamA.name,
       teamB: teamB.name,
       teamAId: teamA.id,
@@ -596,7 +601,7 @@ export default function CreateScreen({ navigation }) {
 
     // Reset create flow and navigate to Live Scoring
     setActiveStep(0);
-    navigation.navigate('LiveScoring', { matchData: newMatchData });
+    navigation.navigate('LiveScoring', { matchData: newMatchData, isScorer: true });
   };
 
   // ==========================================
