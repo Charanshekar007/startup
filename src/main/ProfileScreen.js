@@ -74,6 +74,8 @@ export default function ProfileScreen({ route }) {
   const [editTeam, setEditTeam] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
+  const { matches = [] } = useMatches() || {};
+
   // Fetch real profile on mount or user change
   useEffect(() => {
     let isMounted = true;
@@ -126,7 +128,6 @@ export default function ProfileScreen({ route }) {
   const posts = effectiveAccount?.posts ?? 0;
 
   // 3. Connect to Matches & Compute Real Statistics from Actual Matches
-  const { matches = [] } = useMatches() || {};
   const playerStats = useMemo(() => {
     return calculatePlayerStats(matches, profileOwnerId, {
       formatFilter: activeMatchFilter,
@@ -275,7 +276,18 @@ export default function ProfileScreen({ route }) {
       
       {/* Top Nav */}
       <View className="flex-row justify-between items-center mb-5">
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          onPress={() => {
+            if (route?.params?.returnDestination === 'TournamentDetail' && route?.params?.tournamentId) {
+              navigation.navigate('TournamentDetail', {
+                tournamentId: route.params.tournamentId,
+                initialTab: route.params.initialTab || 'TEAMS',
+              });
+            } else {
+              navigation.goBack();
+            }
+          }}
+        >
           <Feather name="chevron-left" size={28} color={theme.text} />
         </TouchableOpacity>
         <Text className="text-white text-base font-bold">Profile</Text>
@@ -291,6 +303,7 @@ export default function ProfileScreen({ route }) {
           </TouchableOpacity>
         </View>
       </View>
+
 
       {/* Profile Info */}
       <View className="flex-row items-center mb-5">
@@ -985,6 +998,21 @@ export default function ProfileScreen({ route }) {
               <Feather name="chevron-right" size={16} color="#666666" />
             </TouchableOpacity>
           )}
+
+          {/* My Tournaments Option */}
+          <TouchableOpacity
+            onPress={() => {
+              setShowMenuModal(false);
+              navigation.navigate('MyTournaments', { returnDestination: 'Profile' });
+            }}
+            className="p-3.5 bg-[#181818] rounded-xl mb-2.5 flex-row items-center active:bg-[#202020]"
+          >
+            <View className="w-8 h-8 rounded-lg bg-[#222222] items-center justify-center mr-3">
+              <Ionicons name="trophy-outline" size={16} color="#23c55e" />
+            </View>
+            <Text className="text-white text-sm font-semibold flex-1">My Tournaments</Text>
+            <Feather name="chevron-right" size={16} color="#666666" />
+          </TouchableOpacity>
 
           {/* Share Profile */}
           <TouchableOpacity

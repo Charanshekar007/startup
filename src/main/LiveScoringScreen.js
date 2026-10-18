@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,15 +8,18 @@ import {
   Image,
   Modal,
   Alert,
+  AppState,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons, Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import { useMatches } from '../context/MatchContext';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useMatches, subscribeToMatch } from '../context/MatchContext';
 import { SQUAD_A, SQUAD_B } from '../data/cricketSquads';
 import { isMatchFollowed, toggleFollowMatch } from '../services/followService';
 import { useAuthStore } from '../store/authStore';
 import { CURRENT_MOCK_USER } from '../data/mockPlayers';
+import { tournamentService } from '../services/tournamentService';
 
 // Strike rate calculation helper
 const getSR = (runs, balls) => {
@@ -48,9 +51,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const insets = useSafeAreaInsets();
   const bottomInset = insets?.bottom || 0;
 
-  const { activeMatch, updateMatch } = useMatches() || {};
-  const matchParam = route?.params?.matchData || route?.params?.match || activeMatch;
-  const isFresh = !!matchParam?.isFreshMatch;
+  const { activeMatch, updateMatch, refreshMatchFromStorage, getMatch } = useMatches() || {};
+  const matchParam = route?.params?.matchData || route?.params?.match || activeMatch || (route?.params?.matchId ? getMatch?.(route?.params?.matchId) : null);
+  const existingLive = matchParam?.liveState || null;
+  const isFresh = !!matchParam?.isFreshMatch && !existingLive;
 
   // Retrieve current active user profile
   const accountData = useAuthStore?.((state) => state.accountData) || null;
@@ -108,22 +112,6 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     return true;
   };
 
-  // Live auto-refresh sync effect for spectator mode
-  useEffect(() => {
-    if (!isSpectatorMode || !matchParam?.id) return;
-    const interval = setInterval(() => {
-      if (activeMatch && activeMatch.id === matchParam.id) {
-        if (activeMatch.totalRuns !== undefined && activeMatch.totalRuns !== totalRuns) {
-          setTotalRuns(activeMatch.totalRuns);
-        }
-        if (activeMatch.totalWickets !== undefined && activeMatch.totalWickets !== totalWickets) {
-          setTotalWickets(activeMatch.totalWickets);
-        }
-      }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [isSpectatorMode, matchParam?.id, activeMatch, totalRuns, totalWickets]);
-
   useEffect(() => {
     if (matchParam?.id) {
       setIsMatchSavedFollowed(isMatchFollowed(matchParam.id));
@@ -159,33 +147,73 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const playingXI_A = matchParam?.playingXI_A || SQUAD_A.slice(0, 11);
   const playingXI_B = matchParam?.playingXI_B || SQUAD_B.slice(0, 11);
 
+  // Grounded initial values: from existing liveState or persisted matchParam
+  let parsedInnings = 1;
+  let parsedRuns = 0;
+  let parsedWickets = 0;
+  let parsedOvers = 0;
+  let parsedBalls = 0;
+  let parsedTarget = null;
+
+  if (existingLive) {
+    parsedInnings = existingLive.currentInnings ?? 1;
+    parsedRuns = existingLive.totalRuns ?? 0;
+    parsedWickets = existingLive.totalWickets ?? 0;
+    parsedOvers = existingLive.currentOverNumber ?? 0;
+    parsedBalls = existingLive.legalBalls ?? 0;
+    parsedTarget = existingLive.targetRuns ?? null;
+  } else if (!isFresh && matchParam) {
+    if (matchParam.scoreB && matchParam.scoreB !== '-/-' && matchParam.scoreB !== '0/0') {
+      parsedInnings = 2;
+      const parts = String(matchParam.scoreB).split('/');
+      parsedRuns = parseInt(parts[0], 10) || 0;
+      parsedWickets = parseInt(parts[1], 10) || 0;
+      if (matchParam.oversB) {
+        const ovStr = String(matchParam.oversB).replace(/[^0-9.]/g, '');
+        const ovParts = ovStr.split('.');
+        parsedOvers = parseInt(ovParts[0], 10) || 0;
+        parsedBalls = parseInt(ovParts[1], 10) || 0;
+      }
+      if (matchParam.target) parsedTarget = matchParam.target;
+    } else if (matchParam.scoreA && matchParam.scoreA !== '-/-') {
+      parsedInnings = 1;
+      const parts = String(matchParam.scoreA).split('/');
+      parsedRuns = parseInt(parts[0], 10) || 0;
+      parsedWickets = parseInt(parts[1], 10) || 0;
+      if (matchParam.oversA) {
+        const ovStr = String(matchParam.oversA).replace(/[^0-9.]/g, '');
+        const ovParts = ovStr.split('.');
+        parsedOvers = parseInt(ovParts[0], 10) || 0;
+        parsedBalls = parseInt(ovParts[1], 10) || 0;
+      }
+    }
+  }
+
   // Innings tracking
-  const [currentInnings, setCurrentInnings] = useState(isFresh ? 1 : 2);
-  const [totalRuns, setTotalRuns] = useState(isFresh ? 0 : 152);
-  const [totalWickets, setTotalWickets] = useState(isFresh ? 0 : 4);
-  const [legalBalls, setLegalBalls] = useState(isFresh ? 0 : 3);
-  const [currentOverNumber, setCurrentOverNumber] = useState(isFresh ? 0 : 18);
-  const [extrasTotal, setExtrasTotal] = useState(isFresh ? 0 : 14);
+  const [currentInnings, setCurrentInnings] = useState(parsedInnings);
+  const [totalRuns, setTotalRuns] = useState(parsedRuns);
+  const [totalWickets, setTotalWickets] = useState(parsedWickets);
+  const [legalBalls, setLegalBalls] = useState(parsedBalls);
+  const [currentOverNumber, setCurrentOverNumber] = useState(parsedOvers);
+  const [extrasTotal, setExtrasTotal] = useState(existingLive?.extrasTotal ?? 0);
   const [extrasBreakdown, setExtrasBreakdown] = useState(
-    isFresh
-      ? { wides: 0, noBalls: 0, byes: 0, legByes: 0, penalty: 0 }
-      : { wides: 5, noBalls: 2, byes: 4, legByes: 3, penalty: 0 }
+    existingLive?.extrasBreakdown || { wides: 0, noBalls: 0, byes: 0, legByes: 0, penalty: 0 }
   );
 
-  // Target runs (null for 1st innings; set when 2nd innings begins)
-  const [targetRuns, setTargetRuns] = useState(isFresh ? null : 186);
+  // Target runs
+  const [targetRuns, setTargetRuns] = useState(parsedTarget);
 
   // Super Over State
-  const [isSuperOver, setIsSuperOver] = useState(false);
-  const [superOverNumber, setSuperOverNumber] = useState(1);
-  const [superOverInnings, setSuperOverInnings] = useState(1);
-  const [superOverBattingTeam, setSuperOverBattingTeam] = useState(firstInningsBowlingTeam);
-  const [superOverBowlingTeam, setSuperOverBowlingTeam] = useState(firstInningsBattingTeam);
-  const [superOverTarget, setSuperOverTarget] = useState(null);
-  const [superOverInnings1Summary, setSuperOverInnings1Summary] = useState(null);
-  const [superOvers, setSuperOvers] = useState([]);
+  const [isSuperOver, setIsSuperOver] = useState(existingLive?.isSuperOver ?? false);
+  const [superOverNumber, setSuperOverNumber] = useState(existingLive?.superOverNumber ?? 1);
+  const [superOverInnings, setSuperOverInnings] = useState(existingLive?.superOverInnings ?? 1);
+  const [superOverBattingTeam, setSuperOverBattingTeam] = useState(existingLive?.superOverBattingTeam || firstInningsBowlingTeam);
+  const [superOverBowlingTeam, setSuperOverBowlingTeam] = useState(existingLive?.superOverBowlingTeam || firstInningsBattingTeam);
+  const [superOverTarget, setSuperOverTarget] = useState(existingLive?.superOverTarget || null);
+  const [superOverInnings1Summary, setSuperOverInnings1Summary] = useState(existingLive?.superOverInnings1Summary || null);
+  const [superOvers, setSuperOvers] = useState(existingLive?.superOvers || []);
   const [tiedSuperOverData, setTiedSuperOverData] = useState(null);
-  const [secondInningsSummary, setSecondInningsSummary] = useState(null);
+  const [secondInningsSummary, setSecondInningsSummary] = useState(existingLive?.secondInningsSummary || matchParam?.secondInnings || null);
   const [matchTiedData, setMatchTiedData] = useState(null);
 
   // ICC Restrictions Tracking for Super Overs
@@ -193,9 +221,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const [previousSuperOverBowlers, setPreviousSuperOverBowlers] = useState({});
 
   // First Innings Record & Match Completion State
-  const [firstInningsSummary, setFirstInningsSummary] = useState(null);
+  const [firstInningsSummary, setFirstInningsSummary] = useState(existingLive?.firstInningsSummary || matchParam?.firstInnings || null);
   const [matchResult, setMatchResult] = useState(
-    matchParam?.status === 'Completed'
+    existingLive?.matchResult ||
+    (matchParam?.status === 'Completed'
       ? {
           winner: matchParam.winner || null,
           margin: matchParam.margin || (matchParam.result === 'DRAW' ? 'Draw' : ''),
@@ -211,9 +240,9 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           secondInnings: matchParam.secondInnings || null,
           superOvers: matchParam.superOvers || [],
         }
-      : null
+      : null)
   );
-  const [scorecardInningsTab, setScorecardInningsTab] = useState(1); // 1 | 2 | 3 for final scorecard
+  const [scorecardInningsTab, setScorecardInningsTab] = useState(1);
 
   // Active Batting and Bowling Squads for the active innings
   const currentBattingTeam = isSuperOver
@@ -227,116 +256,341 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const currentBowlingSquad = currentBowlingTeam === teamA ? playingXI_A : playingXI_B;
 
   // Initial Players Setup
-  const initialStriker = isFresh && matchParam?.firstInningsSetup?.striker
-    ? { ...matchParam.firstInningsSetup.striker, runs: 0, balls: 0, fours: 0, sixes: 0 }
-    : { id: currentBattingSquad[0].id, name: currentBattingSquad[0].name, img: currentBattingSquad[0].img, runs: isFresh ? 0 : 72, balls: isFresh ? 0 : 45, fours: isFresh ? 0 : 8, sixes: isFresh ? 0 : 3 };
+  const initialStriker = existingLive?.striker
+    ? existingLive.striker
+    : (matchParam?.firstInningsSetup?.striker
+      ? { ...matchParam.firstInningsSetup.striker, runs: 0, balls: 0, fours: 0, sixes: 0 }
+      : { id: currentBattingSquad[0]?.id || 's1', name: currentBattingSquad[0]?.name || 'Batter 1', img: currentBattingSquad[0]?.img, runs: parsedRuns > 0 ? Math.floor(parsedRuns * 0.6) : 0, balls: parsedRuns > 0 ? Math.floor(parsedRuns * 0.5) : 0, fours: 0, sixes: 0 });
 
-  const initialNonStriker = isFresh && matchParam?.firstInningsSetup?.nonStriker
-    ? { ...matchParam.firstInningsSetup.nonStriker, runs: 0, balls: 0, fours: 0, sixes: 0 }
-    : { id: currentBattingSquad[1].id, name: currentBattingSquad[1].name, img: currentBattingSquad[1].img, runs: isFresh ? 0 : 28, balls: isFresh ? 0 : 22, fours: isFresh ? 0 : 2, sixes: isFresh ? 0 : 1 };
+  const initialNonStriker = existingLive?.nonStriker
+    ? existingLive.nonStriker
+    : (matchParam?.firstInningsSetup?.nonStriker
+      ? { ...matchParam.firstInningsSetup.nonStriker, runs: 0, balls: 0, fours: 0, sixes: 0 }
+      : { id: currentBattingSquad[1]?.id || 's2', name: currentBattingSquad[1]?.name || 'Batter 2', img: currentBattingSquad[1]?.img, runs: parsedRuns > 0 ? Math.floor(parsedRuns * 0.3) : 0, balls: parsedRuns > 0 ? Math.floor(parsedRuns * 0.4) : 0, fours: 0, sixes: 0 });
 
-  const initialBowler = isFresh && matchParam?.firstInningsSetup?.bowler
-    ? { ...matchParam.firstInningsSetup.bowler, overs: '0.0', maidens: 0, runsConceded: 0, wickets: 0 }
-    : { id: currentBowlingSquad[0].id, name: currentBowlingSquad[0].name, img: currentBowlingSquad[0].img, overs: isFresh ? '0.0' : '3.3', maidens: 0, runsConceded: isFresh ? 0 : 28, wickets: isFresh ? 0 : 1 };
+  const initialBowler = existingLive?.bowler
+    ? existingLive.bowler
+    : (matchParam?.firstInningsSetup?.bowler
+      ? { ...matchParam.firstInningsSetup.bowler, overs: '0.0', maidens: 0, runsConceded: 0, wickets: 0 }
+      : { id: currentBowlingSquad[0]?.id || 'b1', name: currentBowlingSquad[0]?.name || 'Bowler 1', img: currentBowlingSquad[0]?.img, overs: `${parsedOvers}.${parsedBalls}`, maidens: 0, runsConceded: parsedRuns, wickets: parsedWickets });
 
-  const initialWicketkeeper = isFresh && matchParam?.firstInningsSetup?.wicketkeeper
-    ? matchParam.firstInningsSetup.wicketkeeper
-    : (currentBowlingSquad.find((p) => p.role?.includes('WK')) || currentBowlingSquad[0]);
+  const initialWicketkeeper = existingLive?.wicketkeeper
+    ? existingLive.wicketkeeper
+    : (matchParam?.firstInningsSetup?.wicketkeeper
+      ? matchParam.firstInningsSetup.wicketkeeper
+      : (currentBowlingSquad.find((p) => p.role?.includes('WK')) || currentBowlingSquad[0]));
 
-  // Current Batters & Keeper state
   const [striker, setStriker] = useState(initialStriker);
   const [nonStriker, setNonStriker] = useState(initialNonStriker);
   const [bowler, setBowler] = useState(initialBowler);
   const [wicketkeeper, setWicketkeeper] = useState(initialWicketkeeper);
 
-  // Batters scorecard tracking across the innings
   const [battersScorecard, setBattersScorecard] = useState(() => {
+    if (existingLive?.battersScorecard && Array.isArray(existingLive.battersScorecard) && existingLive.battersScorecard.length > 0) {
+      return existingLive.battersScorecard;
+    }
     return currentBattingSquad.map((p) => {
       if (p.id === initialStriker.id) {
-        return { ...p, runs: initialStriker.runs, balls: initialStriker.balls, fours: initialStriker.fours, sixes: initialStriker.sixes, status: 'not out', dismissal: 'batting' };
+        return { ...p, runs: initialStriker.runs, balls: initialStriker.balls, fours: initialStriker.fours || 0, sixes: initialStriker.sixes || 0, status: 'not out', dismissal: 'batting' };
       }
       if (p.id === initialNonStriker.id) {
-        return { ...p, runs: initialNonStriker.runs, balls: initialNonStriker.balls, fours: initialNonStriker.fours, sixes: initialNonStriker.sixes, status: 'not out', dismissal: 'batting' };
+        return { ...p, runs: initialNonStriker.runs, balls: initialNonStriker.balls, fours: initialNonStriker.fours || 0, sixes: initialNonStriker.sixes || 0, status: 'not out', dismissal: 'batting' };
       }
       return { ...p, runs: 0, balls: 0, fours: 0, sixes: 0, status: 'yet to bat', dismissal: '' };
     });
   });
 
-  // Bowler match statistics map
   const [bowlerStatsMap, setBowlerStatsMap] = useState(() => {
+    if (existingLive?.bowlerStatsMap && Object.keys(existingLive.bowlerStatsMap).length > 0) {
+      return existingLive.bowlerStatsMap;
+    }
     const map = {};
     currentBowlingSquad.forEach((b) => {
       map[b.id] = {
         name: b.name,
-        overs: b.id === initialBowler.id && !isFresh ? 3 : 0,
-        balls: b.id === initialBowler.id && !isFresh ? 3 : 0,
+        overs: b.id === initialBowler.id ? parsedOvers : 0,
+        balls: b.id === initialBowler.id ? parsedBalls : 0,
         maidens: 0,
-        runsConceded: b.id === initialBowler.id && !isFresh ? 28 : 0,
-        wickets: b.id === initialBowler.id && !isFresh ? 1 : 0,
+        runsConceded: b.id === initialBowler.id ? parsedRuns : 0,
+        wickets: b.id === initialBowler.id ? parsedWickets : 0,
       };
     });
     return map;
   });
 
-  // Track bowler who bowled previous over
-  const [previousBowlerId, setPreviousBowlerId] = useState(null);
-
-  // Bottom drawer state for automatic next-over bowler selection
+  const [previousBowlerId, setPreviousBowlerId] = useState(existingLive?.previousBowlerId || null);
   const [showBowlerSelectDrawer, setShowBowlerSelectDrawer] = useState(false);
   const [selectedNextBowler, setSelectedNextBowler] = useState(null);
 
-  // Current over balls & Past overs history
-  const [currentOverBalls, setCurrentOverBalls] = useState(
-    isFresh
-      ? []
-      : [
-          { type: 'run', value: '1', runs: 1, isLegal: true },
-          { type: 'run', value: '4', runs: 4, isLegal: true },
-          { type: 'run', value: '0', runs: 0, isLegal: true },
-        ]
-  );
+  const [currentOverBalls, setCurrentOverBalls] = useState(() => {
+    if (existingLive?.currentOverBalls) return existingLive.currentOverBalls;
+    return [];
+  });
 
-  const [pastOvers, setPastOvers] = useState(
-    isFresh
-      ? []
-      : [
-          { overNum: 15, balls: ['1', '4', '0', '6', '1'], runs: 12 },
-          { overNum: 16, balls: ['0', '1', '1', 'W', '0'], runs: 7 },
-          { overNum: 17, balls: ['2', '1', '0', '4', 'W'], runs: 7 },
-          { overNum: 18, balls: ['1', '4', '0', 'W', '1', '6'], runs: 12 },
-        ]
-  );
+  const [pastOvers, setPastOvers] = useState(() => {
+    if (existingLive?.pastOvers) return existingLive.pastOvers;
+    return [];
+  });
 
-  // Fall of wickets list
-  const [fallOfWickets, setFallOfWickets] = useState(
-    isFresh
-      ? []
-      : [
-          { wicket: 1, score: 24, batter: 'Rohit Sharma' },
-          { wicket: 2, score: 68, batter: 'Charan Teja' },
-          { wicket: 3, score: 98, batter: 'Karthik Nair' },
-          { wicket: 4, score: 128, batter: 'Deepak Chahar' },
-          { wicket: 5, score: 140, batter: 'Surya Varma' },
-        ]
-  );
+  const [fallOfWickets, setFallOfWickets] = useState(() => {
+    if (existingLive?.fallOfWickets) return existingLive.fallOfWickets;
+    return [];
+  });
 
-  // Live commentary feed state
   const [commentaryList, setCommentaryList] = useState(() => {
-    if (isFresh) {
-      return [
-        {
-          id: 'c0',
-          over: '0.0',
-          text: `${matchParam?.tossWinner || firstInningsBattingTeam} won the toss and elected to ${matchParam?.decision || 'Bat'}. ${initialStriker.name} and ${initialNonStriker.name} are opening the batting for ${firstInningsBattingTeam}. ${initialBowler.name} opens the bowling for ${firstInningsBowlingTeam}.`,
-        },
-      ];
+    if (existingLive?.commentaryList && existingLive.commentaryList.length > 0) {
+      return existingLive.commentaryList;
     }
     return [
-      { id: 'c3', over: '18.3', text: 'Vikram Rao to Rahul Kumar, no run, solidly defended to mid-off.' },
-      { id: 'c2', over: '18.2', text: 'Vikram Rao to Rahul Kumar, FOUR runs, beautifully driven through the covers!' },
-      { id: 'c1', over: '18.1', text: 'Vikram Rao to Rahul Kumar, 1 run, pushed to long-on for a single.' },
+      {
+        id: `c_${Date.now()}`,
+        over: `${parsedOvers}.${parsedBalls}`,
+        text: `${matchParam?.tossWinner || firstInningsBattingTeam} won the toss and elected to ${matchParam?.decision || 'Bat'}. ${initialStriker.name} and ${initialNonStriker.name} are at the crease.`,
+      },
     ];
   });
+
+  // Sequence, Idempotency & Live State Sync Guards
+  const deliverySequenceRef = useRef(existingLive?.deliverySequence || 0);
+  const lastAppliedSequenceRef = useRef(existingLive?.deliverySequence || 0);
+  const lastAppliedTimestampRef = useRef(existingLive?.updatedAt || 0);
+
+  // Apply complete state snapshot from persistence or real-time event
+  const applyLiveState = (liveState, matchStatus, matchWinner, fullMatch) => {
+    if (!liveState) return;
+    const isCompletedUpdate =
+      matchStatus === 'Completed' ||
+      fullMatch?.status === 'Completed' ||
+      Boolean(liveState.matchResult || fullMatch?.matchResult);
+    const seq = liveState.deliverySequence || 0;
+    const ts = liveState.updatedAt || fullMatch?.lastScoredAt || 0;
+
+    // Idempotency: ignore duplicate or out-of-order update unless it is a match completion event
+    if (!isCompletedUpdate) {
+      if (seq > 0 && seq <= lastAppliedSequenceRef.current) {
+        return;
+      }
+      if (seq === 0 && (lastAppliedSequenceRef.current > 0 || (ts > 0 && ts <= lastAppliedTimestampRef.current))) {
+        return;
+      }
+    }
+
+    lastAppliedSequenceRef.current = Math.max(lastAppliedSequenceRef.current, seq);
+    lastAppliedTimestampRef.current = Math.max(lastAppliedTimestampRef.current, ts);
+    deliverySequenceRef.current = Math.max(deliverySequenceRef.current, seq);
+
+    if (liveState.totalRuns !== undefined) setTotalRuns(liveState.totalRuns);
+    if (liveState.totalWickets !== undefined) setTotalWickets(liveState.totalWickets);
+    if (liveState.legalBalls !== undefined) setLegalBalls(liveState.legalBalls);
+    if (liveState.currentOverNumber !== undefined) setCurrentOverNumber(liveState.currentOverNumber);
+    if (liveState.currentInnings !== undefined) setCurrentInnings(liveState.currentInnings);
+    if (liveState.extrasTotal !== undefined) setExtrasTotal(liveState.extrasTotal);
+    if (liveState.extrasBreakdown !== undefined) setExtrasBreakdown(liveState.extrasBreakdown);
+    if (liveState.targetRuns !== undefined) setTargetRuns(liveState.targetRuns);
+    if (liveState.striker) setStriker(liveState.striker);
+    if (liveState.nonStriker) setNonStriker(liveState.nonStriker);
+    if (liveState.bowler) setBowler(liveState.bowler);
+    if (liveState.wicketkeeper) setWicketkeeper(liveState.wicketkeeper);
+    if (liveState.battersScorecard) setBattersScorecard(liveState.battersScorecard);
+    if (liveState.bowlerStatsMap) setBowlerStatsMap(liveState.bowlerStatsMap);
+    if (liveState.currentOverBalls) setCurrentOverBalls(liveState.currentOverBalls);
+    if (liveState.pastOvers) setPastOvers(liveState.pastOvers);
+    if (liveState.fallOfWickets) setFallOfWickets(liveState.fallOfWickets);
+    if (liveState.commentaryList) setCommentaryList(liveState.commentaryList);
+    if (liveState.previousBowlerId !== undefined) setPreviousBowlerId(liveState.previousBowlerId);
+    if (liveState.firstInningsSummary !== undefined) setFirstInningsSummary(liveState.firstInningsSummary);
+    if (liveState.secondInningsSummary !== undefined) setSecondInningsSummary(liveState.secondInningsSummary);
+    if (liveState.isSuperOver !== undefined) setIsSuperOver(liveState.isSuperOver);
+    if (liveState.superOvers) setSuperOvers(liveState.superOvers);
+    if (liveState.matchResult || fullMatch?.matchResult || isCompletedUpdate) {
+      const res =
+        liveState.matchResult ||
+        fullMatch?.matchResult || {
+          winner: matchWinner || fullMatch?.winner,
+          resultText: fullMatch?.status === 'Completed' ? (fullMatch?.winner ? `${fullMatch.winner} won the match.` : 'Match Completed') : 'Match Completed',
+        };
+      setMatchResult(res);
+      setCurrentScreen('MATCH_RESULT');
+    }
+  };
+
+  // Realtime subscription via MatchContext pub/sub
+  useEffect(() => {
+    if (!matchParam?.id) return;
+    const unsub = subscribeToMatch(matchParam.id, (updatedMatch) => {
+      if (updatedMatch?.liveState) {
+        applyLiveState(
+          updatedMatch.liveState,
+          updatedMatch.status,
+          updatedMatch.winner,
+          updatedMatch
+        );
+      } else if (updatedMatch?.status === 'Completed') {
+        const res = updatedMatch.matchResult || {
+          winner: updatedMatch.winner,
+          resultText: updatedMatch.winner ? `${updatedMatch.winner} won the match.` : 'Match Completed',
+        };
+        setMatchResult(res);
+        setCurrentScreen('MATCH_RESULT');
+      }
+    });
+    return () => {
+      unsub();
+    };
+  }, [matchParam?.id]);
+
+  // Initial catchup on mount + Foreground polling (sensible fallback for cross-process/storage refresh)
+  useEffect(() => {
+    if (!matchParam?.id) return;
+
+    let isMounted = true;
+
+    // Immediate mount catchup
+    (async () => {
+      try {
+        const fresh = await refreshMatchFromStorage?.(matchParam.id);
+        if (isMounted && fresh?.liveState) {
+          applyLiveState(fresh.liveState, fresh.status, fresh.winner, fresh);
+        }
+      } catch (e) {}
+    })();
+
+    // Polling interval only runs for spectator mode while in foreground
+    if (!isSpectatorMode) return () => { isMounted = false; };
+
+    const interval = setInterval(async () => {
+      if (AppState?.currentState && AppState.currentState !== 'active') {
+        return;
+      }
+      try {
+        const fresh = await refreshMatchFromStorage?.(matchParam.id);
+        if (isMounted && fresh?.liveState) {
+          applyLiveState(fresh.liveState, fresh.status, fresh.winner, fresh);
+        }
+      } catch (e) {}
+    }, 1500);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [isSpectatorMode, matchParam?.id]);
+
+  // Scorer Delivery Persistence Engine: Writes consistent snapshot before confirmation
+  const persistLiveDelivery = async (overrides = {}) => {
+    if (!assertScorerPermission()) return;
+    if (!matchParam?.id || !updateMatch) return;
+
+    deliverySequenceRef.current += 1;
+    const currentSeq = deliverySequenceRef.current;
+
+    const snapRuns = overrides.totalRuns !== undefined ? overrides.totalRuns : totalRuns;
+    const snapWickets = overrides.totalWickets !== undefined ? overrides.totalWickets : totalWickets;
+    const snapLegalBalls = overrides.legalBalls !== undefined ? overrides.legalBalls : legalBalls;
+    const snapCurrentOverNumber = overrides.currentOverNumber !== undefined ? overrides.currentOverNumber : currentOverNumber;
+    const snapInnings = overrides.currentInnings !== undefined ? overrides.currentInnings : currentInnings;
+    const snapExtrasTotal = overrides.extrasTotal !== undefined ? overrides.extrasTotal : extrasTotal;
+    const snapExtrasBreakdown = overrides.extrasBreakdown || extrasBreakdown;
+    const snapTargetRuns = overrides.targetRuns !== undefined ? overrides.targetRuns : targetRuns;
+    const snapStriker = overrides.striker || striker;
+    const snapNonStriker = overrides.nonStriker || nonStriker;
+    const snapBowler = overrides.bowler || bowler;
+    const snapWicketkeeper = overrides.wicketkeeper || wicketkeeper;
+    const snapBatters = overrides.battersScorecard || battersScorecard;
+    const snapBowlersMap = overrides.bowlerStatsMap || bowlerStatsMap;
+    const snapBallsInOver = overrides.currentOverBalls || currentOverBalls;
+    const snapPastOvers = overrides.pastOvers || pastOvers;
+    const snapFallOfWickets = overrides.fallOfWickets || fallOfWickets;
+    const snapCommentary = overrides.commentaryList || commentaryList;
+    const snapPreviousBowlerId = overrides.previousBowlerId !== undefined ? overrides.previousBowlerId : previousBowlerId;
+    const snapInn1Summary = overrides.firstInningsSummary !== undefined ? overrides.firstInningsSummary : firstInningsSummary;
+    const snapInn2Summary = overrides.secondInningsSummary !== undefined ? overrides.secondInningsSummary : secondInningsSummary;
+    const snapIsSuperOver = overrides.isSuperOver !== undefined ? overrides.isSuperOver : isSuperOver;
+    const snapSuperOvers = overrides.superOvers !== undefined ? overrides.superOvers : superOvers;
+    const snapMatchResult = overrides.matchResult !== undefined ? overrides.matchResult : matchResult;
+
+    const oversFormatted = `${snapCurrentOverNumber}.${snapLegalBalls}`;
+
+    const liveState = {
+      deliverySequence: currentSeq,
+      updatedAt: Date.now(),
+      currentInnings: snapInnings,
+      totalRuns: snapRuns,
+      totalWickets: snapWickets,
+      legalBalls: snapLegalBalls,
+      currentOverNumber: snapCurrentOverNumber,
+      overs: oversFormatted,
+      extrasTotal: snapExtrasTotal,
+      extrasBreakdown: { ...snapExtrasBreakdown },
+      targetRuns: snapTargetRuns,
+      striker: { ...snapStriker },
+      nonStriker: { ...snapNonStriker },
+      bowler: { ...snapBowler },
+      wicketkeeper: { ...snapWicketkeeper },
+      battersScorecard: snapBatters ? JSON.parse(JSON.stringify(snapBatters)) : [],
+      bowlerStatsMap: snapBowlersMap ? JSON.parse(JSON.stringify(snapBowlersMap)) : {},
+      currentOverBalls: snapBallsInOver ? JSON.parse(JSON.stringify(snapBallsInOver)) : [],
+      pastOvers: snapPastOvers ? JSON.parse(JSON.stringify(snapPastOvers)) : [],
+      fallOfWickets: snapFallOfWickets ? JSON.parse(JSON.stringify(snapFallOfWickets)) : [],
+      commentaryList: snapCommentary ? JSON.parse(JSON.stringify(snapCommentary)) : [],
+      previousBowlerId: snapPreviousBowlerId,
+      firstInningsSummary: snapInn1Summary ? JSON.parse(JSON.stringify(snapInn1Summary)) : null,
+      secondInningsSummary: snapInn2Summary ? JSON.parse(JSON.stringify(snapInn2Summary)) : null,
+      isSuperOver: snapIsSuperOver,
+      superOvers: snapSuperOvers ? JSON.parse(JSON.stringify(snapSuperOvers)) : [],
+      matchResult: snapMatchResult ? JSON.parse(JSON.stringify(snapMatchResult)) : null,
+    };
+
+    let scoreA = matchParam.scoreA || '0/0';
+    let oversA = matchParam.oversA || '0.0 Ov';
+    let scoreB = matchParam.scoreB || '-/-';
+    let oversB = matchParam.oversB || 'Yet to bat';
+
+    if (snapInnings === 1) {
+      scoreA = `${snapRuns}/${snapWickets}`;
+      oversA = `${oversFormatted} Ov`;
+    } else {
+      if (snapInn1Summary) {
+        scoreA = `${snapInn1Summary.totalRuns}/${snapInn1Summary.totalWickets}`;
+        oversA = `${snapInn1Summary.overs} Ov`;
+      }
+      scoreB = `${snapRuns}/${snapWickets}`;
+      oversB = `${oversFormatted} Ov`;
+    }
+
+    let statusText = 'Live';
+    if (snapMatchResult) {
+      statusText = 'Completed';
+    } else if (snapInnings === 2 && snapTargetRuns) {
+      const needed = snapTargetRuns - snapRuns;
+      if (needed > 0) {
+        const remainingBalls = Math.max(0, totalOversMax * 6 - (snapCurrentOverNumber * 6 + snapLegalBalls));
+        statusText = `${currentBattingTeam} need ${needed} runs from ${remainingBalls} balls`;
+      } else {
+        statusText = `${currentBattingTeam} won!`;
+      }
+    } else if (snapInnings === 1) {
+      statusText = `${firstInningsBattingTeam} batting (${scoreA}, ${oversA})`;
+    }
+
+    try {
+      await updateMatch(matchParam.id, {
+        liveState,
+        scoreA,
+        oversA,
+        scoreB,
+        oversB,
+        status: snapMatchResult ? 'Completed' : 'Live',
+        matchSituationText: statusText,
+        lastScoredAt: Date.now(),
+        firstInnings: snapInn1Summary,
+        secondInnings: snapInn2Summary,
+        matchResult: snapMatchResult,
+      });
+    } catch (err) {
+      console.warn('[LiveScoring] Failed to persist delivery to storage:', err);
+    }
+  };
 
   // Extras bottom drawer states
   const [showNoBallDrawer, setShowNoBallDrawer] = useState(false);
@@ -355,6 +609,40 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
   const [currentScreen, setCurrentScreen] = useState(
     matchParam?.status === 'Completed' ? 'MATCH_RESULT' : 'MAIN'
   );
+
+  // Unified Exit / Return handler respecting tournament context and standalone matches
+  const handleExitScoring = useCallback(() => {
+    const tournId = matchParam?.tournamentId || route?.params?.tournamentId;
+    const returnDest = route?.params?.returnDestination;
+    if (tournId) {
+      navigation.navigate('TournamentDetail', {
+        tournamentId: tournId,
+        initialTab: 'Fixtures',
+        returnDestination: returnDest || 'MyTournaments',
+      });
+    } else if (navigation?.canGoBack && navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('MainTabs', { screen: 'Matches' });
+    }
+  }, [navigation, matchParam?.tournamentId, route?.params?.tournamentId, route?.params?.returnDestination]);
+
+  // Intercept Android hardware back button inside scoring screen
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (currentScreen !== 'MAIN' && currentScreen !== 'MATCH_RESULT') {
+          setCurrentScreen('MAIN');
+          return true;
+        }
+        handleExitScoring();
+        return true;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => sub.remove();
+    }, [currentScreen, handleExitScoring])
+  );
+
   const [isProcessingAction, setIsProcessingAction] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showEditLastBallModal, setShowEditLastBallModal] = useState(false);
@@ -536,13 +824,40 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     if (previousState.targetRuns !== undefined) setTargetRuns(previousState.targetRuns);
     if (previousState.currentInnings !== undefined) setCurrentInnings(previousState.currentInnings);
 
-    if (updateMatch && matchParam?.id) {
-      updateMatch(matchParam.id, {
-        status: 'Live',
-        winner: null,
-        margin: null,
-      });
-    }
+    persistLiveDelivery({
+      totalRuns: previousState.totalRuns,
+      totalWickets: previousState.totalWickets,
+      legalBalls: previousState.legalBalls,
+      currentOverNumber: previousState.currentOverNumber,
+      extrasTotal: previousState.extrasTotal,
+      extrasBreakdown: previousState.extrasBreakdown,
+      striker: previousState.striker,
+      nonStriker: previousState.nonStriker,
+      bowler: previousState.bowler,
+      wicketkeeper: previousState.wicketkeeper,
+      isSuperOver: previousState.isSuperOver,
+      superOverNumber: previousState.superOverNumber,
+      superOverInnings: previousState.superOverInnings,
+      superOverTarget: previousState.superOverTarget,
+      superOverBattingTeam: previousState.superOverBattingTeam,
+      superOverBowlingTeam: previousState.superOverBowlingTeam,
+      battersScorecard: previousState.battersScorecard,
+      currentOverBalls: previousState.currentOverBalls,
+      pastOvers: previousState.pastOvers,
+      fallOfWickets: previousState.fallOfWickets,
+      bowlerStatsMap: previousState.bowlerStatsMap,
+      previousBowlerId: previousState.previousBowlerId,
+      commentaryList: previousState.commentaryList,
+      firstInningsSummary: previousState.firstInningsSummary || null,
+      superOverInnings1Summary: previousState.superOverInnings1Summary || null,
+      matchResult: previousState.matchResult || null,
+      matchTiedData: previousState.matchTiedData || null,
+      tiedSuperOverData: previousState.tiedSuperOverData || null,
+      secondInningsSummary: previousState.secondInningsSummary || null,
+      superOvers: previousState.superOvers || [],
+      targetRuns: previousState.targetRuns,
+      currentInnings: previousState.currentInnings,
+    });
 
     setCurrentScreen('MAIN');
   };
@@ -602,13 +917,18 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     setFirstInningsSummary(summary);
     setTargetRuns(summary.target);
 
-    if (updateMatch && matchParam?.id) {
-      updateMatch(matchParam.id, {
-        scoreA: `${summary.totalRuns}/${summary.totalWickets}`,
-        oversA: `${summary.overs} Ov`,
-        status: `Innings 1 Complete: ${firstInningsBattingTeam} scored ${summary.totalRuns}/${summary.totalWickets}`,
-      });
-    }
+    persistLiveDelivery({
+      firstInningsSummary: summary,
+      targetRuns: summary.target,
+      totalRuns: summary.totalRuns,
+      totalWickets: summary.totalWickets,
+      legalBalls: legalBalls,
+      currentOverNumber: currentOverNumber,
+      battersScorecard: summary.batters,
+      bowlerStatsMap: summary.bowlers,
+      fallOfWickets: summary.fallOfWickets,
+      pastOvers: summary.pastOvers,
+    });
 
     setCurrentScreen('INNINGS_SUMMARY');
   };
@@ -654,6 +974,12 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         oversB: `${inn2.overs} Ov`,
       });
     }
+
+    persistLiveDelivery({
+      status: 'Match Tied - Super Over Required',
+      secondInningsSummary: inn2,
+      currentScreen: 'MATCH_TIED',
+    });
 
     setCurrentScreen('MATCH_TIED');
   };
@@ -703,6 +1029,15 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     setSetupNonStrikerSO(eligibleBatters[1] || nextBattingSquad[1]);
     setSetupBowlerSO(eligibleBowlers[eligibleBowlers.length - 1] || eligibleBowlers[0] || nextBowlingSquad[0]);
     setSetupKeeperSO(nextBowlingSquad.find((p) => p.role?.includes('WK')) || nextBowlingSquad[0]);
+
+    persistLiveDelivery({
+      superOverInnings: 2,
+      superOverTarget: target,
+      superOverBattingTeam: nextBattingTeam,
+      superOverBowlingTeam: nextBowlingTeam,
+      superOverInnings1Summary: summary,
+      currentScreen: 'SUPER_OVER_SETUP',
+    });
 
     setCurrentScreen('SUPER_OVER_SETUP');
   };
@@ -781,6 +1116,11 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         team2: inn2.battingTeam,
         team2Runs: inn2.totalRuns,
         team2Wickets: inn2.totalWickets,
+      });
+      persistLiveDelivery({
+        status: 'Super Over Tied',
+        currentScreen: 'SUPER_OVER_TIED',
+        superOvers: updatedSuperOvers,
       });
       setCurrentScreen('SUPER_OVER_TIED');
     } else {
@@ -964,7 +1304,44 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
         completedAt: finalResult.completedAt,
         playingXI_A: matchParam?.playingXI_A || playingXI_A,
         playingXI_B: matchParam?.playingXI_B || playingXI_B,
+        matchResult: finalResult,
+        liveState: {
+          deliverySequence: (deliverySequenceRef.current || 0) + 1,
+          updatedAt: Date.now(),
+          matchResult: finalResult,
+          status: 'Completed',
+          currentInnings,
+          totalRuns: finalRuns !== undefined ? finalRuns : totalRuns,
+          totalWickets: finalWickets !== undefined ? finalWickets : totalWickets,
+          legalBalls,
+          currentOverNumber,
+          striker,
+          nonStriker,
+          bowler,
+          firstInningsSummary: inn1,
+          secondInningsSummary: inn2,
+          commentaryList,
+          battersScorecard: customBatters || battersScorecard,
+          bowlerStatsMap: inn2Bowlers,
+        },
       });
+    }
+
+    // Sync match result back to tournament fixture if part of a tournament
+    const tournId = matchParam?.tournamentId || route?.params?.tournamentId;
+    const fixId = matchParam?.fixtureId || route?.params?.fixtureId;
+    if (tournId && fixId) {
+      tournamentService
+        .syncMatchResultToFixture(tournId, fixId, {
+          id: matchParam.id,
+          winner: finalResult.winner,
+          matchResult: finalResult,
+          scoreA: matchParam.scoreA || `${inn1.totalRuns}/${inn1.totalWickets}`,
+          oversA: matchParam.oversA || `${inn1.overs} Ov`,
+          scoreB: `${inn2.totalRuns}/${inn2.totalWickets}`,
+          oversB: `${inn2.overs} Ov`,
+        })
+        .catch((err) => console.warn('Failed to sync match result to tournament:', err));
     }
 
     setCurrentScreen('MATCH_RESULT');
@@ -1169,6 +1546,23 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     // Otherwise prompt next bowler
     setSelectedNextBowler(null);
     setShowBowlerSelectDrawer(true);
+
+    persistLiveDelivery({
+      totalRuns: currentRuns,
+      totalWickets: currentWickets,
+      legalBalls: 0,
+      currentOverNumber: finishedOverNumber,
+      currentOverBalls: [],
+      pastOvers: newPastOvers,
+      bowlerStatsMap: newBowlerStatsMap,
+      previousBowlerId: finishedBowler.id,
+      bowler: {
+        ...finishedBowler,
+        overs: `${currentCompletedOvers}.0`,
+        maidens: isMaiden ? finishedBowler.maidens + 1 : finishedBowler.maidens,
+      },
+      battersScorecard: currentBatters,
+    });
   };
 
   const handleConfirmNextBowler = () => {
@@ -1187,7 +1581,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       wickets: 0,
     };
 
-    setBowler({
+    const nextBowlerObj = {
       id: selectedNextBowler.id,
       name: selectedNextBowler.name,
       img: selectedNextBowler.img,
@@ -1195,10 +1589,14 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       maidens: existingStats.maidens,
       runsConceded: existingStats.runsConceded,
       wickets: existingStats.wickets,
-    });
+    };
+
+    setBowler(nextBowlerObj);
 
     setShowBowlerSelectDrawer(false);
     setSelectedNextBowler(null);
+
+    persistLiveDelivery({ bowler: nextBowlerObj });
   };
 
   // -----------------------------------------------------------------------
@@ -1318,6 +1716,21 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       setLegalBalls(nextLegalBalls);
       updatedBowler.overs = `${currentOverNumber}.${nextLegalBalls}`;
       setBowler(updatedBowler);
+      persistLiveDelivery({
+        totalRuns: newRuns,
+        totalWickets,
+        legalBalls: nextLegalBalls,
+        currentOverNumber,
+        striker: runs % 2 !== 0 ? nonStriker : updatedStriker,
+        nonStriker: runs % 2 !== 0 ? updatedStriker : nonStriker,
+        bowler: updatedBowler,
+        currentOverBalls: updatedBalls,
+        commentaryList: [
+          { id: `c_${Date.now()}_${Math.random()}`, over: overDisplay, text: commDesc },
+          ...commentaryList,
+        ],
+        battersScorecard: updatedBattersScorecard,
+      });
     }
   };
 
@@ -1416,6 +1829,21 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       });
       return;
     }
+
+    persistLiveDelivery({
+      totalRuns: newTotal,
+      extrasTotal: extrasTotal + 1,
+      extrasBreakdown: { ...extrasBreakdown, noBalls: extrasBreakdown.noBalls + 1 },
+      striker: offBatRuns % 2 !== 0 ? nonStriker : updatedStriker,
+      nonStriker: offBatRuns % 2 !== 0 ? updatedStriker : nonStriker,
+      bowler: updatedBowler,
+      battersScorecard: updatedBattersScorecard,
+      currentOverBalls: [...currentOverBalls, newBallObj],
+      commentaryList: [
+        { id: `c_${Date.now()}_${Math.random()}`, over: overDisplay, text: commDesc },
+        ...commentaryList,
+      ],
+    });
   };
 
   const handleScoreNoBallByes = (byeRuns) => {
@@ -1493,6 +1921,25 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       });
       return;
     }
+
+    persistLiveDelivery({
+      totalRuns: newTotal,
+      extrasTotal: extrasTotal + teamRunsToAdd,
+      extrasBreakdown: {
+        ...extrasBreakdown,
+        noBalls: extrasBreakdown.noBalls + 1,
+        byes: extrasBreakdown.byes + byeRuns,
+      },
+      striker: byeRuns % 2 !== 0 ? nonStriker : updatedStriker,
+      nonStriker: byeRuns % 2 !== 0 ? updatedStriker : nonStriker,
+      bowler: updatedBowler,
+      battersScorecard: updatedBattersScorecard,
+      currentOverBalls: [...currentOverBalls, newBallObj],
+      commentaryList: [
+        { id: `c_${Date.now()}_${Math.random()}`, over: overDisplay, text: commDesc },
+        ...commentaryList,
+      ],
+    });
   };
 
   const handleScoreNoBallLegByes = (legByeRuns) => {
@@ -1570,6 +2017,25 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       });
       return;
     }
+
+    persistLiveDelivery({
+      totalRuns: newTotal,
+      extrasTotal: extrasTotal + teamRunsToAdd,
+      extrasBreakdown: {
+        ...extrasBreakdown,
+        noBalls: extrasBreakdown.noBalls + 1,
+        legByes: extrasBreakdown.legByes + legByeRuns,
+      },
+      striker: legByeRuns % 2 !== 0 ? nonStriker : updatedStriker,
+      nonStriker: legByeRuns % 2 !== 0 ? updatedStriker : nonStriker,
+      bowler: updatedBowler,
+      battersScorecard: updatedBattersScorecard,
+      currentOverBalls: [...currentOverBalls, newBallObj],
+      commentaryList: [
+        { id: `c_${Date.now()}_${Math.random()}`, over: overDisplay, text: commDesc },
+        ...commentaryList,
+      ],
+    });
   };
 
   const handleScoreNoBallWicket = () => {
@@ -1708,6 +2174,23 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     } else {
       setNonStriker(newBatterObj);
     }
+
+    persistLiveDelivery({
+      totalRuns: newTotal,
+      totalWickets: newWickets,
+      extrasTotal: extrasTotal + 1,
+      extrasBreakdown: { ...extrasBreakdown, noBalls: extrasBreakdown.noBalls + 1 },
+      striker: noBallRunOutBatter === 'striker' ? newBatterObj : striker,
+      nonStriker: noBallRunOutBatter === 'striker' ? nonStriker : newBatterObj,
+      bowler: updatedBowler,
+      battersScorecard: updatedBattersScorecard,
+      fallOfWickets: newFallOfWickets,
+      currentOverBalls: [...currentOverBalls, newBallObj],
+      commentaryList: [
+        { id: `c_${Date.now()}_${Math.random()}`, over: overDisplay, text: commDesc },
+        ...commentaryList,
+      ],
+    });
   };
 
   // -----------------------------------------------------------------------
@@ -1774,6 +2257,20 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       });
       return;
     }
+
+    persistLiveDelivery({
+      totalRuns: newTotal,
+      extrasTotal: extrasTotal + wideRuns,
+      extrasBreakdown: { ...extrasBreakdown, wides: extrasBreakdown.wides + wideRuns },
+      bowler: updatedBowler,
+      striker: extraRuns % 2 !== 0 ? nonStriker : striker,
+      nonStriker: extraRuns % 2 !== 0 ? striker : nonStriker,
+      currentOverBalls: [...currentOverBalls, newBallObj],
+      commentaryList: [
+        { id: `c_${Date.now()}_${Math.random()}`, over: overDisplay, text: commDesc },
+        ...commentaryList,
+      ],
+    });
   };
 
   // -----------------------------------------------------------------------
@@ -1886,6 +2383,23 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       setLegalBalls(nextLegalBalls);
       const updatedBowler = { ...bowler, overs: `${currentOverNumber}.${nextLegalBalls}` };
       setBowler(updatedBowler);
+      persistLiveDelivery({
+        totalRuns: newTotal,
+        totalWickets,
+        legalBalls: nextLegalBalls,
+        currentOverNumber,
+        extrasTotal: extrasTotal + byeRuns,
+        extrasBreakdown: { ...extrasBreakdown, byes: extrasBreakdown.byes + byeRuns },
+        striker: nextStriker,
+        nonStriker: nextNonStriker,
+        bowler: updatedBowler,
+        battersScorecard: updatedBattersScorecard,
+        currentOverBalls: updatedBalls,
+        commentaryList: [
+          { id: `c_${Date.now()}_${Math.random()}`, over: overDisplay, text: commDesc },
+          ...commentaryList,
+        ],
+      });
     }
   };
 
@@ -1999,6 +2513,23 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       setLegalBalls(nextLegalBalls);
       const updatedBowler = { ...bowler, overs: `${currentOverNumber}.${nextLegalBalls}` };
       setBowler(updatedBowler);
+      persistLiveDelivery({
+        totalRuns: newTotal,
+        totalWickets,
+        legalBalls: nextLegalBalls,
+        currentOverNumber,
+        extrasTotal: extrasTotal + legByeRuns,
+        extrasBreakdown: { ...extrasBreakdown, legByes: extrasBreakdown.legByes + legByeRuns },
+        striker: nextStriker,
+        nonStriker: nextNonStriker,
+        bowler: updatedBowler,
+        battersScorecard: updatedBattersScorecard,
+        currentOverBalls: updatedBalls,
+        commentaryList: [
+          { id: `c_${Date.now()}_${Math.random()}`, over: overDisplay, text: commDesc },
+          ...commentaryList,
+        ],
+      });
     }
   };
 
@@ -2217,6 +2748,22 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
       setLegalBalls(nextLegalBalls);
       updatedBowler.overs = `${currentOverNumber}.${nextLegalBalls}`;
       setBowler(updatedBowler);
+      persistLiveDelivery({
+        totalRuns: newRuns,
+        totalWickets: newWickets,
+        legalBalls: nextLegalBalls,
+        currentOverNumber,
+        striker: activeStriker,
+        nonStriker: activeNonStriker,
+        bowler: updatedBowler,
+        battersScorecard: updatedBattersScorecard,
+        fallOfWickets: newFallOfWickets,
+        currentOverBalls: updatedBalls,
+        commentaryList: [
+          { id: `c_${Date.now()}_${Math.random()}`, over: overDisplay, text: commDesc },
+          ...commentaryList,
+        ],
+      });
     }
 
     setCurrentScreen('MAIN');
@@ -2234,7 +2781,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
             if (!isSpectatorMode && isScoringLocked && historyStack.length > 0) {
               handleUndo();
             } else {
-              navigation.goBack();
+              handleExitScoring();
             }
           }}
           className="p-1"
@@ -2463,7 +3010,7 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
                   Max: {isSuperOver ? '1 over limit' : `${Math.ceil(totalOversMax / 5)} overs limit`}
                 </Text>
               </View>
-              {wicketkeeper?.name && (
+              {Boolean(wicketkeeper?.name) && (
                 <View className="flex-row items-center justify-between border-t border-[#1a1a1a] pt-2 mt-2">
                   <View className="flex-row items-center">
                     <Ionicons name="hand-left-outline" size={13} color="#888888" style={{ marginRight: 6 }} />
@@ -3939,14 +4486,13 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
               setShowBowlerSelectDrawer(false);
 
               // Initialize 2nd innings batters scorecard
-              setBattersScorecard(
-                secondInningsBattingSquad.map((p) => {
-                  if (p.id === s2.id || p.id === ns2.id) {
-                    return { ...p, runs: 0, balls: 0, fours: 0, sixes: 0, status: 'not out', dismissal: 'batting' };
-                  }
-                  return { ...p, runs: 0, balls: 0, fours: 0, sixes: 0, status: 'yet to bat', dismissal: '' };
-                })
-              );
+              const initBatters2 = secondInningsBattingSquad.map((p) => {
+                if (p.id === s2.id || p.id === ns2.id) {
+                  return { ...p, runs: 0, balls: 0, fours: 0, sixes: 0, status: 'not out', dismissal: 'batting' };
+                }
+                return { ...p, runs: 0, balls: 0, fours: 0, sixes: 0, status: 'yet to bat', dismissal: '' };
+              });
+              setBattersScorecard(initBatters2);
 
               // Initialize 2nd innings bowlers map
               const bMap = {};
@@ -3955,13 +4501,37 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
               });
               setBowlerStatsMap(bMap);
 
-              setCommentaryList([
+              const initComm2 = [
                 {
                   id: 'c2_start',
                   over: '0.0',
                   text: `Second Innings begins! ${firstInningsBowlingTeam} need ${target} runs from ${totalOversMax} overs to win. ${s2.name} and ${ns2.name} are opening. ${b2.name} is bowling with ${setupKeeper2.name} keeping wickets.`,
                 },
-              ]);
+              ];
+              setCommentaryList(initComm2);
+
+              persistLiveDelivery({
+                currentInnings: 2,
+                isSuperOver: false,
+                totalRuns: 0,
+                totalWickets: 0,
+                legalBalls: 0,
+                currentOverNumber: 0,
+                extrasTotal: 0,
+                extrasBreakdown: { wides: 0, noBalls: 0, byes: 0, legByes: 0, penalty: 0 },
+                targetRuns: target,
+                currentOverBalls: [],
+                pastOvers: [],
+                fallOfWickets: [],
+                striker: s2,
+                nonStriker: ns2,
+                bowler: b2,
+                wicketkeeper: setupKeeper2,
+                previousBowlerId: null,
+                battersScorecard: initBatters2,
+                bowlerStatsMap: bMap,
+                commentaryList: initComm2,
+              });
 
               setCurrentScreen('MAIN');
             }}
@@ -4380,16 +4950,13 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
               setPreviousBowlerId(null);
               setShowBowlerSelectDrawer(false);
 
-              // Initialize scorecard with eligible batters
-              const remainingBatters = battingSquad.filter((p) => !dismissedBatters.includes(p.id) && !dismissedBatters.includes(p.name));
-              setBattersScorecard(
-                remainingBatters.map((p) => {
-                  if (p.id === s.id || p.id === ns.id) {
-                    return { ...p, runs: 0, balls: 0, fours: 0, sixes: 0, status: 'not out', dismissal: 'batting' };
-                  }
-                  return { ...p, runs: 0, balls: 0, fours: 0, sixes: 0, status: 'yet to bat', dismissal: '' };
-                })
-              );
+              const soBatters = battingSquad.map((p) => {
+                if (p.id === s.id || p.id === ns.id) {
+                  return { ...p, runs: 0, balls: 0, fours: 0, sixes: 0, status: 'not out', dismissal: 'batting' };
+                }
+                return { ...p, runs: 0, balls: 0, fours: 0, sixes: 0, status: 'yet to bat', dismissal: '' };
+              });
+              setBattersScorecard(soBatters);
 
               const bMap = {};
               bowlingSquad.forEach((p) => {
@@ -4397,13 +4964,40 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
               });
               setBowlerStatsMap(bMap);
 
-              setCommentaryList([
+              const soCommList = [
                 {
                   id: `so_c_${Date.now()}`,
                   over: '0.0',
-                  text: `Super Over ${superOverNumber > 1 ? `#${superOverNumber} ` : ''}Innings ${superOverInnings} begins! ${superOverBattingTeam} batting vs ${superOverBowlingTeam}. ${s.name} & ${ns.name} at the crease. ${b.name} bowling, ${setupKeeperSO.name} keeping.`,
+                  text: `Super Over ${superOverNumber > 1 ? `#${superOverNumber} ` : ''}Innings ${superOverInnings} begins! ${superOverBattingTeam} batting vs ${superOverBowlingTeam}. ${s.name} & ${ns.name} at the crease. ${b.name} bowling, ${setupKeeperSO?.name || 'Keeper'} keeping.`,
                 },
-              ]);
+              ];
+              setCommentaryList(soCommList);
+
+              persistLiveDelivery({
+                isSuperOver: true,
+                superOverNumber,
+                superOverInnings,
+                superOverBattingTeam,
+                superOverBowlingTeam,
+                superOverTarget: superOverInnings === 2 ? superOverTarget : null,
+                totalRuns: 0,
+                totalWickets: 0,
+                legalBalls: 0,
+                currentOverNumber: 0,
+                extrasTotal: 0,
+                extrasBreakdown: { wides: 0, noBalls: 0, byes: 0, legByes: 0, penalty: 0 },
+                currentOverBalls: [],
+                pastOvers: [],
+                fallOfWickets: [],
+                striker: s,
+                nonStriker: ns,
+                bowler: b,
+                wicketkeeper: setupKeeperSO,
+                previousBowlerId: null,
+                battersScorecard: soBatters,
+                bowlerStatsMap: bMap,
+                commentaryList: soCommList,
+              });
 
               setCurrentScreen('MAIN');
             }}
@@ -4537,7 +5131,10 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
     return (
       <View className="flex-1 bg-[#0a0a0a]">
         <View className="flex-row items-center justify-between px-4 py-3 border-b border-[#1f1f1f]">
-          <TouchableOpacity onPress={() => setCurrentScreen('MAIN')} className="p-1">
+          <TouchableOpacity
+            onPress={handleExitScoring}
+            className="p-1"
+          >
             <Feather name="arrow-left" size={22} color="#ffffff" />
           </TouchableOpacity>
           <Text className="text-white text-base font-bold">Match Result</Text>
@@ -4706,18 +5303,38 @@ export default function LiveScoringScreen({ navigation: navProp, route: routePro
           style={{ paddingBottom: Math.max(16, bottomInset + 8) }}
           className="absolute bottom-0 left-0 right-0 p-4 bg-[#0a0a0a] border-t border-[#1f1f1f] flex-row justify-between"
         >
-          <TouchableOpacity
-            onPress={() => navigation.navigate('MainTabs', { screen: 'Matches' })}
-            className="w-[48%] py-3.5 rounded-xl bg-[#181818] border border-[#2a2a2a] items-center"
-          >
-            <Text className="text-white text-xs font-bold">BACK TO MATCHES</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('MainTabs', { screen: 'Create' })}
-            className="w-[48%] py-3.5 rounded-xl bg-[#23c55e] items-center"
-          >
-            <Text className="text-black text-xs font-bold">NEW MATCH</Text>
-          </TouchableOpacity>
+          {(matchParam?.tournamentId || route?.params?.tournamentId) ? (
+            <>
+              <TouchableOpacity
+                onPress={handleExitScoring}
+                className="w-[58%] py-3.5 rounded-xl bg-[#23c55e] items-center flex-row justify-center"
+              >
+                <Feather name="award" size={15} color="#000" style={{ marginRight: 6 }} />
+                <Text className="text-black text-xs font-bold">BACK TO TOURNAMENT</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('MainTabs', { screen: 'Matches' })}
+                className="w-[38%] py-3.5 rounded-xl bg-[#181818] border border-[#2a2a2a] items-center justify-center"
+              >
+                <Text className="text-white text-xs font-bold">MATCHES</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('MainTabs', { screen: 'Matches' })}
+                className="w-[48%] py-3.5 rounded-xl bg-[#181818] border border-[#2a2a2a] items-center justify-center"
+              >
+                <Text className="text-white text-xs font-bold">BACK TO MATCHES</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('MainTabs', { screen: 'Create' })}
+                className="w-[48%] py-3.5 rounded-xl bg-[#23c55e] items-center justify-center"
+              >
+                <Text className="text-black text-xs font-bold">NEW MATCH</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
     );

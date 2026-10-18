@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons, Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useMatches } from '../context/MatchContext';
 import { playerService } from '../services/playerService';
 import { teamService } from '../services/teamService';
 import { CURRENT_MOCK_USER } from '../data/mockPlayers';
 import { INITIAL_MOCK_TEAMS } from '../data/mockTeams';
+import ResumeTaskCard from '../components/ResumeTaskCard';
+import { tournamentService } from '../services/tournamentService';
+import { getActiveRecoveryTask } from '../utils/taskRecovery';
 
 const getActiveMembers = (team) => {
   if (!team || !Array.isArray(team.members)) return [];
@@ -123,7 +127,30 @@ export default function CreateScreen({ navigation }) {
   const [pickerConfig, setPickerConfig] = useState(null); // { title, role, team, players, currentId, onSelect }
 
   // Global Match Store
-  const { addMatch, setActiveMatch } = useMatches();
+  const { addMatch, setActiveMatch, matches = [] } = useMatches() || {};
+  const [activeTask, setActiveTask] = useState(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      (async () => {
+        try {
+          const user = await playerService.getCurrentUser();
+          const uId = user?.id || user?.playerId || currentUser?.id || 'usr_arjun123';
+          const tournaments = await tournamentService.getUserTournaments(uId);
+          if (isMounted) {
+            const task = getActiveRecoveryTask({
+              currentUserId: uId,
+              tournaments: tournaments || [],
+              matches: matches || [],
+            });
+            setActiveTask(task);
+          }
+        } catch (e) {}
+      })();
+      return () => { isMounted = false; };
+    }, [currentUser?.id, matches])
+  );
 
   // Load mock user and teams from services on mount
   useEffect(() => {
@@ -661,20 +688,38 @@ export default function CreateScreen({ navigation }) {
   // ==========================================
   const renderHub = () => (
     <View className="flex-1 bg-[#0a0a0a]">
-      <View className="px-4 pt-4 pb-6">
-        <View className="flex-row items-center mb-1">
-          <MaterialCommunityIcons
-            name="alpha-p-box"
-            size={32}
-            color={theme.primary}
-            style={{ marginRight: 8 }}
-          />
-          <Text className="text-white text-[32px] font-bold">Create</Text>
+      <View className="px-4 pt-4 pb-4 flex-row justify-between items-end">
+        <View>
+          <View className="flex-row items-center mb-1">
+            <MaterialCommunityIcons
+              name="alpha-p-box"
+              size={32}
+              color={theme.primary}
+              style={{ marginRight: 8 }}
+            />
+            <Text className="text-white text-[32px] font-bold">Create</Text>
+          </View>
+          <Text className="text-[#888888] text-sm">Build, organize, and play</Text>
         </View>
-        <Text className="text-[#888888] text-sm">Build, organize, and play</Text>
+
+        <TouchableOpacity
+          onPress={() => navigation.navigate('MyTournaments', { returnDestination: 'Create' })}
+          className="bg-[#181818] border border-[#23c55e]/30 px-3 py-1.5 rounded-xl flex-row items-center mb-1"
+        >
+          <Feather name="award" size={13} color="#23c55e" className="mr-1.5" />
+          <Text className="text-[#23c55e] text-xs font-bold">My Tournaments</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}>
+        {/* Contextual Pick Up Where You Left Off Card */}
+        {activeTask && (
+          <ResumeTaskCard
+            task={activeTask}
+            onMyTournamentsPress={() => navigation.navigate('MyTournaments', { returnDestination: 'Create' })}
+          />
+        )}
+
         {/* Create Match Hero Card */}
         <TouchableOpacity
           className="w-full h-[180px] rounded-2xl overflow-hidden mb-4"
@@ -721,6 +766,7 @@ export default function CreateScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
+            onPress={() => navigation.navigate('TournamentWizard')}
             className="bg-[#121212] rounded-2xl p-4 border border-[#222222]"
             style={{ width: (width - 48) / 2 }}
           >
@@ -734,13 +780,14 @@ export default function CreateScreen({ navigation }) {
 
         <View className="flex-row justify-between mb-4">
           <TouchableOpacity
+            onPress={() => navigation.navigate('MyTournaments', { returnDestination: 'Create' })}
             className="bg-[#121212] rounded-2xl p-4 border border-[#222222]"
             style={{ width: (width - 48) / 2 }}
           >
-            <Feather name="edit" size={28} color={theme.text} className="mb-3" />
-            <Text className="text-white text-[15px] font-bold mb-1">Create Post</Text>
+            <Ionicons name="trophy-outline" size={28} color="#23c55e" className="mb-3" />
+            <Text className="text-white text-[15px] font-bold mb-1">My Tournaments</Text>
             <Text className="text-[#888888] text-[11px] leading-4">
-              Share moments with the community
+              Manage drafts, live leagues & history
             </Text>
           </TouchableOpacity>
           <TouchableOpacity

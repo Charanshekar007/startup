@@ -10,6 +10,36 @@ const MatchContext = createContext();
 // Clean initial state: no hardcoded fake/mock completed matches
 const DEFAULT_MATCHES = [];
 
+// In-memory Pub/Sub registry for real-time match event distribution
+const matchSubscribers = new Map(); // matchId -> Set of callbacks
+
+export const subscribeToMatch = (matchId, callback) => {
+  if (!matchId || typeof callback !== 'function') return () => {};
+  if (!matchSubscribers.has(matchId)) {
+    matchSubscribers.set(matchId, new Set());
+  }
+  const set = matchSubscribers.get(matchId);
+  set.add(callback);
+  return () => {
+    set.delete(callback);
+    if (set.size === 0) {
+      matchSubscribers.delete(matchId);
+    }
+  };
+};
+
+const notifyMatchSubscribers = (matchId, matchData) => {
+  if (!matchId || !matchSubscribers.has(matchId)) return;
+  const set = matchSubscribers.get(matchId);
+  set.forEach((cb) => {
+    try {
+      cb(matchData);
+    } catch (err) {
+      console.warn('[MatchContext] Error in subscriber callback:', err);
+    }
+  });
+};
+
 // 2. Create the Provider Component
 export const MatchProvider = ({ children }) => {
   const [matches, setMatches] = useState(DEFAULT_MATCHES);
@@ -48,43 +78,146 @@ export const MatchProvider = ({ children }) => {
   }, []);
 
   // Function to add a brand new match to the top of the list
-  const addMatch = (newMatchDetails) => {
+  const addMatch = async (newMatchDetails) => {
     const matchWithId = {
       id: newMatchDetails.id || `match_${Date.now()}`,
       ...newMatchDetails,
     };
-    setMatches((prevMatches) => {
-      // Prevent duplicate match_id
-      const existsIndex = prevMatches.findIndex((m) => m.id === matchWithId.id);
+    try {
+      let currentStored = [];
+      try {
+        const raw = await AsyncStorage.getItem(MATCHES_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) currentStored = parsed;
+        }
+      } catch (e) {}
+
+      const sourceList = currentStored.length > 0 ? currentStored : matches;
+      const existsIndex = sourceList.findIndex((m) => m && m.id === matchWithId.id);
       let updated;
       if (existsIndex >= 0) {
-        updated = [...prevMatches];
+        updated = [...sourceList];
         updated[existsIndex] = { ...updated[existsIndex], ...matchWithId };
       } else {
-        updated = [matchWithId, ...prevMatches];
+        updated = [matchWithId, ...sourceList];
       }
-      AsyncStorage.setItem(MATCHES_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
-      return updated;
-    });
-    setActiveMatch(matchWithId);
-    return matchWithId;
+      await AsyncStorage.setItem(MATCHES_STORAGE_KEY, JSON.stringify(updated));
+      setMatches(updated);
+      setActiveMatch(matchWithId);
+      notifyMatchSubscribers(matchWithId.id, matchWithId);
+      return matchWithId;
+    } catch (err) {
+      console.warn('Error saving match in addMatch:', err);
+      setMatches((prev) => [matchWithId, ...prev.filter((m) => m.id !== matchWithId.id)]);
+      setActiveMatch(matchWithId);
+      return matchWithId;
+    }
   };
 
-  // Function to update an existing match in the list
-  const updateMatch = (matchId, updatedFields) => {
-    setMatches((prevMatches) => {
-      const updated = prevMatches.map((m) =>
-        m.id === matchId ? { ...m, ...updatedFields } : m
-      );
-      AsyncStorage.setItem(MATCHES_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
-      return updated;
-    });
-    setActiveMatch((prev) => {
-      if (prev && prev.id === matchId) {
-        return { ...prev, ...updatedFields };
+  // Function to update an existing match in the list and persist to storage
+  const updateMatch = async (matchId, updatedFields) => {
+    if (!matchId) return null;
+    try {
+      let updatedMatchObj = null;
+      let newMatchesList = [];
+
+      let currentStored = [];
+      try {
+        const raw = await AsyncStorage.getItem(MATCHES_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) currentStored = parsed;
+        }
+      } catch (e) {}
+
+      const listToUpdate = currentStored.length > 0 ? currentStored : matches;
+      const existsIndex = listToUpdate.findIndex((m) => m && m.id === matchId);
+
+      if (existsIndex >= 0) {
+        updatedMatchObj = {
+          ...listToUpdate[existsIndex],
+          ...updatedFields,
+          updatedAt: Date.now(),
+        };
+        newMatchesList = [...listToUpdate];
+        newMatchesList[existsIndex] = updatedMatchObj;
+      } else {
+        const base = (activeMatch && activeMatch.id === matchId) ? activeMatch : { id: matchId };
+        updatedMatchObj = {
+          ...base,
+          ...updatedFields,
+          updatedAt: Date.now(),
+        };
+        newMatchesList = [updatedMatchObj, ...listToUpdate];
       }
-      return prev;
-    });
+
+      // Persist to AsyncStorage BEFORE treating as saved
+      await AsyncStorage.setItem(MATCHES_STORAGE_KEY, JSON.stringify(newMatchesList));
+
+      // Update state
+      setMatches(newMatchesList);
+      setActiveMatch((prev) => (prev && prev.id === matchId ? updatedMatchObj : prev));
+
+      // Immediately notify real-time subscribers
+      notifyMatchSubscribers(matchId, updatedMatchObj);
+
+      // If this match belongs to a tournament, sync result and recalculate standings/progression
+      if (updatedMatchObj && updatedMatchObj.tournamentId && updatedMatchObj.fixtureId) {
+        try {
+          const { tournamentService } = require('../services/tournamentService');
+          tournamentService.syncMatchResultToFixture(
+            updatedMatchObj.tournamentId,
+            updatedMatchObj.fixtureId,
+            updatedMatchObj
+          ).catch((err) => console.warn('[MatchContext] Error syncing tournament match result:', err));
+        } catch (syncErr) {
+          console.warn('[MatchContext] Could not sync match result with tournamentService:', syncErr);
+        }
+      }
+
+      return updatedMatchObj;
+    } catch (err) {
+      console.error('[MatchContext] Failed to persist match update:', err);
+      throw err;
+    }
+  };
+
+  // Function to force-refresh a match directly from AsyncStorage
+  const refreshMatchFromStorage = async (matchId) => {
+    if (!matchId) return null;
+    try {
+      const saved = await AsyncStorage.getItem(MATCHES_STORAGE_KEY);
+      if (!saved) return null;
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed)) return null;
+      const found = parsed.find((m) => m && m.id === matchId);
+      if (found) {
+        setMatches((prev) => {
+          const idx = prev.findIndex((m) => m && m.id === matchId);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...found };
+            return next;
+          }
+          return [found, ...prev];
+        });
+        setActiveMatch((prev) => (prev && prev.id === matchId ? { ...prev, ...found } : prev));
+      }
+      return found || null;
+    } catch (err) {
+      console.warn('[MatchContext] Error refreshing match from storage:', err);
+      return null;
+    }
+  };
+
+  // Synchronous lookup from memory
+  const getMatch = (matchId) => {
+    if (!matchId) return null;
+    const found = matches.find((m) => m && m.id === matchId);
+    if (found) return found;
+    if (activeMatch && activeMatch.id === matchId) return activeMatch;
+    return null;
   };
 
   // Function to clear all matches (useful for test resets)
@@ -96,7 +229,19 @@ export const MatchProvider = ({ children }) => {
 
   // Provide state and functions to the rest of the app
   return (
-    <MatchContext.Provider value={{ matches, activeMatch, setActiveMatch, addMatch, updateMatch, clearMatches }}>
+    <MatchContext.Provider
+      value={{
+        matches,
+        activeMatch,
+        setActiveMatch,
+        addMatch,
+        updateMatch,
+        refreshMatchFromStorage,
+        getMatch,
+        subscribeToMatch,
+        clearMatches,
+      }}
+    >
       {children}
     </MatchContext.Provider>
   );

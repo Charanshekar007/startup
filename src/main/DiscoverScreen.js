@@ -98,6 +98,14 @@ export default function DiscoverScreen() {
           {DISCOVER_CATEGORIES.map((cat) => (
             <TouchableOpacity 
               key={cat.id} 
+              onPress={() => {
+                if (cat.title === 'Tournaments') {
+                  navigation.navigate('TournamentDetail', {
+                    tournamentId: 'tourn_kurukshetra_2026',
+                    returnDestination: 'Discover',
+                  });
+                }
+              }}
               className="bg-[#121212] rounded-2xl p-4 items-center mb-3 border border-[#222222]"
               style={{ width: (width - 44) / 3 }}
             >
@@ -118,7 +126,18 @@ export default function DiscoverScreen() {
         
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="px-4">
           {TRENDING_NOW.map(item => (
-            <TouchableOpacity key={item.id} className="w-[140px] h-[180px] rounded-2xl mr-4 overflow-hidden border border-[#222222]">
+            <TouchableOpacity 
+              key={item.id} 
+              onPress={() => {
+                if (item.id === 't1') {
+                  navigation.navigate('TournamentDetail', {
+                    tournamentId: 'tourn_kurukshetra_2026',
+                    returnDestination: 'Discover',
+                  });
+                }
+              }}
+              className="w-[140px] h-[180px] rounded-2xl mr-4 overflow-hidden border border-[#222222]"
+            >
               <Image source={{ uri: item.image }} className="w-full h-full" />
               <View className="absolute bottom-0 left-0 right-0 p-3 bg-black/60 pt-6">
                 <Text className="text-white text-sm font-bold mb-1" numberOfLines={1}>{item.title}</Text>
@@ -280,7 +299,16 @@ export default function DiscoverScreen() {
             </View>
             <View className="bg-[#121212] rounded-2xl border border-[#222222] overflow-hidden">
               {SEARCH_RESULTS.tournaments.map((t, index) => (
-                <TouchableOpacity key={t.id} className={`flex-row p-4 items-center ${index !== SEARCH_RESULTS.tournaments.length - 1 ? 'border-b border-[#222222]' : ''}`}>
+                <TouchableOpacity 
+                  key={t.id} 
+                  onPress={() =>
+                    navigation.navigate('TournamentDetail', {
+                      tournamentId: t.id === 'tr1' ? 'tourn_kurukshetra_2026' : t.id,
+                      returnDestination: 'Discover',
+                    })
+                  }
+                  className={`flex-row p-4 items-center ${index !== SEARCH_RESULTS.tournaments.length - 1 ? 'border-b border-[#222222]' : ''}`}
+                >
                   <Image source={{ uri: t.logo }} className="w-11 h-11 rounded-lg mr-3 bg-[#161616]" />
                   <View className="flex-1">
                     <Text className="text-white text-[15px] font-bold mb-[2px]">{t.name}</Text>
